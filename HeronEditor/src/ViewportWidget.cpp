@@ -352,8 +352,31 @@ void ViewportWidget::RenderEntities()
 {
     if (!m_ActiveScene) return;
 
+    glm::mat4 viewProj = m_Camera.GetViewProjection();
+
+    if (m_SceneState == SceneState::Play) {
+        auto cameraView = m_ActiveScene->GetRegistry().view<Heron::TransformComponent, Heron::CameraComponent>();
+        for (auto entity : cameraView) {
+            auto [transform, camera] = cameraView.get<Heron::TransformComponent, Heron::CameraComponent>(entity);
+            if (camera.Primary) {
+                float aspect = (float)width() / (float)height();
+                glm::mat4 projection = glm::perspective(glm::radians(camera.FOV), aspect, camera.NearClip, camera.FarClip);
+
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(transform.Translation[0], transform.Translation[1], transform.Translation[2]));
+                model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
+                model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
+                model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
+                
+                glm::mat4 view = glm::inverse(model);
+                viewProj = projection * view;
+                break;
+            }
+        }
+    }
+
     m_MeshShader->Bind();
-    m_MeshShader->SetMat4("u_ViewProjection", m_Camera.GetViewProjection());
+    m_MeshShader->SetMat4("u_ViewProjection", viewProj);
 
     auto& registry = m_ActiveScene->GetRegistry();
     auto view = registry.view<Heron::TransformComponent, Heron::MeshComponent>();
@@ -409,18 +432,20 @@ void ViewportWidget::paintGL()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_DEPTH_TEST);
 
-    // 1) Draw infinite grid
-    m_GridShader->Bind();
-    glm::mat4 invView = glm::inverse(m_Camera.GetViewMatrix());
-    glm::mat4 invProj = glm::inverse(m_Camera.GetProjection());
-    m_GridShader->SetMat4("u_InvView", invView);
-    m_GridShader->SetMat4("u_InvProj", invProj);
-    m_GridShader->SetMat4("u_View", m_Camera.GetViewMatrix());
-    m_GridShader->SetMat4("u_Proj", m_Camera.GetProjection());
-    m_GridShader->SetFloat("u_Near", 0.1f);
-    m_GridShader->SetFloat("u_Far", 1000.0f);
-    m_GridVAO->Bind();
-    Heron::RenderCommand::DrawIndexed(m_GridVAO);
+    // 1) Draw infinite grid (only in Edit mode)
+    if (m_SceneState == SceneState::Edit) {
+        m_GridShader->Bind();
+        glm::mat4 invView = glm::inverse(m_Camera.GetViewMatrix());
+        glm::mat4 invProj = glm::inverse(m_Camera.GetProjection());
+        m_GridShader->SetMat4("u_InvView", invView);
+        m_GridShader->SetMat4("u_InvProj", invProj);
+        m_GridShader->SetMat4("u_View", m_Camera.GetViewMatrix());
+        m_GridShader->SetMat4("u_Proj", m_Camera.GetProjection());
+        m_GridShader->SetFloat("u_Near", 0.1f);
+        m_GridShader->SetFloat("u_Far", 1000.0f);
+        m_GridVAO->Bind();
+        Heron::RenderCommand::DrawIndexed(m_GridVAO);
+    }
 
     // 2) Draw all spawned mesh entities
     RenderEntities();

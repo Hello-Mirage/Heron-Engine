@@ -61,25 +61,35 @@ void SceneHierarchyPanel::OnSelectionChanged()
 
 void SceneHierarchyPanel::ShowContextMenu(const QPoint& pos)
 {
+    if (!m_Context) return;
+
     QTreeWidgetItem* item = m_TreeWidget->itemAt(pos);
-    if (!item || !m_Context) return;
+    QMenu* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
 
-    QMenu menu(this);
-    QAction* deleteAction = menu.addAction("Delete Entity");
-
-    connect(deleteAction, &QAction::triggered, this, [this, item]() {
-        entt::entity entityID = (entt::entity)item->data(0, Qt::UserRole).toUInt();
-        Heron::Entity entity{ entityID, m_Context };
-        
-        m_Context->DestroyEntity(entity);
-        
-        if (m_SelectionContext == entity) {
-            m_SelectionContext = {};
-            emit EntitySelected(m_SelectionContext);
-        }
-        
+    QAction* createEmptyAction = menu->addAction("Create Empty Entity");
+    connect(createEmptyAction, &QAction::triggered, this, [this]() {
+        m_Context->CreateEntity("Empty Entity");
         UpdateHierarchy();
     });
 
-    menu.exec(m_TreeWidget->viewport()->mapToGlobal(pos));
+    if (item) {
+        menu->addSeparator();
+        QAction* deleteAction = menu->addAction("Delete Entity");
+        connect(deleteAction, &QAction::triggered, this, [this, item]() {
+            entt::entity entityID = (entt::entity)item->data(0, Qt::UserRole).toUInt();
+            Heron::Entity entity{ entityID, m_Context };
+            
+            m_Context->DestroyEntity(entity);
+            
+            if (m_SelectionContext == entity) {
+                m_SelectionContext = {};
+                emit EntitySelected(m_SelectionContext);
+            }
+            
+            UpdateHierarchy();
+        });
+    }
+
+    menu->popup(m_TreeWidget->viewport()->mapToGlobal(pos));
 }

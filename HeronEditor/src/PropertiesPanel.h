@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QComboBox>
+#include <QCheckBox>
 
 class PropertiesPanel : public QDockWidget
 {
@@ -28,7 +29,8 @@ private slots:
     void OnAddRigidBodyComponent();
     void OnAddBoxColliderComponent();
     void OnAddScriptComponent();
-
+    void OnAddCameraComponent();
+    void OnCameraChanged();
 private:
     void DrawComponents();
 
@@ -56,8 +58,16 @@ private:
     QPushButton* m_AddRigidBodyBtn;
     QPushButton* m_AddBoxColliderBtn;
     QPushButton* m_AddScriptBtn;
+    QPushButton* m_AddCameraBtn;
 
     // Script
     QGroupBox* m_ScriptGroup;
     QComboBox* m_ScriptCombo;
+
+    // Camera
+    QGroupBox* m_CameraGroup;
+    QCheckBox* m_CameraPrimary;
+    QLineEdit* m_CameraFOV;
+    QLineEdit* m_CameraNear;
+    QLineEdit* m_CameraFar;
 };

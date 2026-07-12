@@ -94,6 +94,31 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(m_AddScriptBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddScriptComponent);
     m_MainLayout->addWidget(m_AddScriptBtn);
 
+    // --- Camera Group ---
+    m_CameraGroup = new QGroupBox("Camera");
+    QFormLayout* cameraLayout = new QFormLayout(m_CameraGroup);
+    
+    m_CameraPrimary = new QCheckBox();
+    m_CameraFOV = new QLineEdit(); m_CameraFOV->setValidator(validator);
+    m_CameraNear = new QLineEdit(); m_CameraNear->setValidator(validator);
+    m_CameraFar = new QLineEdit(); m_CameraFar->setValidator(validator);
+
+    connect(m_CameraPrimary, &QCheckBox::stateChanged, this, &PropertiesPanel::OnCameraChanged);
+    connect(m_CameraFOV, &QLineEdit::textEdited, this, &PropertiesPanel::OnCameraChanged);
+    connect(m_CameraNear, &QLineEdit::textEdited, this, &PropertiesPanel::OnCameraChanged);
+    connect(m_CameraFar, &QLineEdit::textEdited, this, &PropertiesPanel::OnCameraChanged);
+
+    cameraLayout->addRow("Primary", m_CameraPrimary);
+    cameraLayout->addRow("FOV", m_CameraFOV);
+    cameraLayout->addRow("Near Clip", m_CameraNear);
+    cameraLayout->addRow("Far Clip", m_CameraFar);
+    m_MainLayout->addWidget(m_CameraGroup);
+
+    // --- Add Camera Button ---
+    m_AddCameraBtn = new QPushButton("Add Camera");
+    connect(m_AddCameraBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddCameraComponent);
+    m_MainLayout->addWidget(m_AddCameraBtn);
+
     setWidget(m_Container);
 }
 
@@ -191,6 +216,30 @@ void PropertiesPanel::DrawComponents()
         m_ScriptGroup->hide();
         m_AddScriptBtn->show();
     }
+
+    if (m_SelectionContext.HasComponent<Heron::CameraComponent>()) {
+        auto& camera = m_SelectionContext.GetComponent<Heron::CameraComponent>();
+        m_CameraPrimary->blockSignals(true);
+        m_CameraFOV->blockSignals(true);
+        m_CameraNear->blockSignals(true);
+        m_CameraFar->blockSignals(true);
+        
+        m_CameraPrimary->setChecked(camera.Primary);
+        m_CameraFOV->setText(QString::number(camera.FOV));
+        m_CameraNear->setText(QString::number(camera.NearClip));
+        m_CameraFar->setText(QString::number(camera.FarClip));
+        
+        m_CameraPrimary->blockSignals(false);
+        m_CameraFOV->blockSignals(false);
+        m_CameraNear->blockSignals(false);
+        m_CameraFar->blockSignals(false);
+
+        m_CameraGroup->show();
+        m_AddCameraBtn->hide();
+    } else {
+        m_CameraGroup->hide();
+        m_AddCameraBtn->show();
+    }
 }
 
 void PropertiesPanel::OnTagChanged(const QString& text)
@@ -264,5 +313,24 @@ void PropertiesPanel::OnAddScriptComponent()
             nsc.ScriptName = names[0];
         
         DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnAddCameraComponent()
+{
+    if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::CameraComponent>()) {
+        m_SelectionContext.AddComponent<Heron::CameraComponent>();
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnCameraChanged()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::CameraComponent>()) {
+        auto& camera = m_SelectionContext.GetComponent<Heron::CameraComponent>();
+        camera.Primary = m_CameraPrimary->isChecked();
+        camera.FOV = m_CameraFOV->text().toFloat();
+        camera.NearClip = m_CameraNear->text().toFloat();
+        camera.FarClip = m_CameraFar->text().toFloat();
     }
 }

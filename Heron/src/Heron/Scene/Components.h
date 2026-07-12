@@ -51,6 +51,16 @@ namespace Heron {
 		BoxCollider3DComponent(const BoxCollider3DComponent&) = default;
 	};
 
+	struct CameraComponent {
+		bool Primary = true;
+		float FOV = 45.0f;
+		float NearClip = 0.1f;
+		float FarClip = 1000.0f;
+
+		CameraComponent() = default;
+		CameraComponent(const CameraComponent&) = default;
+	};
+
 	enum class PrimitiveType {
 		None = 0,
 		Cube,

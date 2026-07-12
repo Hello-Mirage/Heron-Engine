@@ -115,6 +115,17 @@ namespace Heron {
 			out << YAML::EndMap;
 		}
 
+		if (entity.HasComponent<CameraComponent>()) {
+			out << YAML::Key << "CameraComponent";
+			out << YAML::BeginMap;
+			auto& cc = entity.GetComponent<CameraComponent>();
+			out << YAML::Key << "Primary" << YAML::Value << cc.Primary;
+			out << YAML::Key << "FOV" << YAML::Value << cc.FOV;
+			out << YAML::Key << "NearClip" << YAML::Value << cc.NearClip;
+			out << YAML::Key << "FarClip" << YAML::Value << cc.FarClip;
+			out << YAML::EndMap;
+		}
+
 		out << YAML::EndMap; // Entity
 	}
 
@@ -209,6 +220,15 @@ namespace Heron {
 				if (nativeScriptComponent) {
 					auto& nsc = deserializedEntity.AddComponent<NativeScriptComponent>();
 					nsc.ScriptName = nativeScriptComponent["ScriptName"].as<std::string>();
+				}
+
+				auto cameraComponent = entity["CameraComponent"];
+				if (cameraComponent) {
+					auto& cc = deserializedEntity.AddComponent<CameraComponent>();
+					cc.Primary = cameraComponent["Primary"].as<bool>();
+					cc.FOV = cameraComponent["FOV"].as<float>();
+					cc.NearClip = cameraComponent["NearClip"].as<float>();
+					cc.FarClip = cameraComponent["FarClip"].as<float>();
 				}
 			}
 		}
