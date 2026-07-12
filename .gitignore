@@ -1,0 +1,48 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.cachefile
+*.VC.db
+*.VC.opendb
+
+# Build outputs
+Debug/
+Release/
+x64/
+x86/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.lib
+*.dll
+*.exp
+*.log
+*.tlog
+*.idb
+*.ipch
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# CMake / Build
+build/
+bin/
+bin-int/
+lib/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# User projects
+game/

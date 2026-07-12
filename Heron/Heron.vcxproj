@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{a6bd9f20-3570-408b-9c29-e77b0bd126a5}</ProjectGuid>
+    <RootNamespace>Heron</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>Heron</ProjectName>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <PropertyGroup Label="UserMacros" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
+    <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\$(ProjectName)\</OutDir>
+    <IntDir>$(SolutionDir)bin-int\$(Configuration)-$(Platform)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>HRN_PLATFORM_WINDOWS;HRN_ENABLE_ASSERTS;_DEBUG;IMGUI_IMPL_OPENGL_LOADER_GLAD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)vendor\spdlog\include;$(ProjectDir)vendor\glfw\include;$(ProjectDir)vendor\glad\include;$(ProjectDir)vendor\imgui;$(ProjectDir)vendor\entt\src;$(ProjectDir)vendor\box3d\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>hrnpch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <OutputFile>$(OutDir)Heron.lib</OutputFile>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>HRN_PLATFORM_WINDOWS;NDEBUG;IMGUI_IMPL_OPENGL_LOADER_GLAD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)vendor\spdlog\include;$(ProjectDir)vendor\glfw\include;$(ProjectDir)vendor\glad\include;$(ProjectDir)vendor\imgui;$(ProjectDir)vendor\entt\src;$(ProjectDir)vendor\box3d\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>hrnpch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <OutputFile>$(OutDir)Heron.lib</OutputFile>
+    </Lib>
+  </ItemDefinitionGroup>
+
+  <!-- Source Files -->
+  <ItemGroup>
+    <ClCompile Include="src\hrnpch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\Heron\Core\Log.cpp" />
+    <ClCompile Include="src\Heron\Core\Application.cpp" />
+    <ClCompile Include="src\Heron\Layers\Layer.cpp" />
+    <ClCompile Include="src\Heron\Layers\LayerStack.cpp" />
+    <ClCompile Include="src\Heron\ImGui\ImGuiLayer.cpp" />
+    <ClCompile Include="src\Heron\Scene\Scene.cpp" />
+    <ClCompile Include="src\Heron\Scene\Entity.cpp" />
+    <ClCompile Include="src\Heron\Renderer\Buffer.cpp" />
+    <ClCompile Include="src\Heron\Renderer\VertexArray.cpp" />
+    <ClCompile Include="src\Heron\Renderer\Shader.cpp" />
+    <ClCompile Include="src\Heron\Renderer\RendererAPI.cpp" />
+    <ClCompile Include="src\Heron\Renderer\RenderCommand.cpp" />
+    <ClCompile Include="src\Heron\Platform\OpenGL\OpenGLBuffer.cpp" />
+    <ClCompile Include="src\Heron\Platform\OpenGL\OpenGLVertexArray.cpp" />
+    <ClCompile Include="src\Heron\Platform\OpenGL\OpenGLShader.cpp" />
+    <ClCompile Include="src\Heron\Platform\OpenGL\OpenGLContext.cpp" />
+    <ClCompile Include="src\Heron\Platform\OpenGL\OpenGLRendererAPI.cpp" />
+    <ClCompile Include="src\Heron\Platform\Windows\WindowsWindow.cpp" />
+    <ClCompile Include="src\Heron\Platform\Windows\WindowsInput.cpp" />
+    <ClCompile Include="vendor\imgui\imgui.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\imgui_demo.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\imgui_draw.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\imgui_tables.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\imgui_widgets.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\backends\imgui_impl_glfw.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vendor\imgui\backends\imgui_impl_opengl3.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+
+  <!-- Header Files -->
+  <ItemGroup>
+    <ClInclude Include="src\hrnpch.h" />
+    <ClInclude Include="src\Heron\Heron.h" />
+    <ClInclude Include="src\Heron\Core\Core.h" />
+    <ClInclude Include="src\Heron\Core\Log.h" />
+    <ClInclude Include="src\Heron\Core\Application.h" />
+    <ClInclude Include="src\Heron\Core\EntryPoint.h" />
+    <ClInclude Include="src\Heron\Core\Window.h" />
+    <ClInclude Include="src\Heron\Core\Input.h" />
+    <ClInclude Include="src\Heron\Core\KeyCodes.h" />
+    <ClInclude Include="src\Heron\Core\MouseCodes.h" />
+    <ClInclude Include="src\Heron\Core\Timestep.h" />
+    <ClInclude Include="src\Heron\Events\Event.h" />
+    <ClInclude Include="src\Heron\Events\ApplicationEvent.h" />
+    <ClInclude Include="src\Heron\Events\KeyEvent.h" />
+    <ClInclude Include="src\Heron\Events\MouseEvent.h" />
+    <ClInclude Include="src\Heron\ImGui\ImGuiLayer.h" />
+    <ClInclude Include="src\Heron\Layers\Layer.h" />
+    <ClInclude Include="src\Heron\Layers\LayerStack.h" />
+    <ClInclude Include="src\Heron\Scene\Scene.h" />
+    <ClInclude Include="src\Heron\Scene\Entity.h" />
+    <ClInclude Include="src\Heron\Scene\Components.h" />
+    <ClInclude Include="src\Heron\Platform\OpenGL\OpenGLContext.h" />
+    <ClInclude Include="src\Heron\Platform\OpenGL\OpenGLBuffer.h" />
+    <ClInclude Include="src\Heron\Platform\OpenGL\OpenGLVertexArray.h" />
+    <ClInclude Include="src\Heron\Platform\OpenGL\OpenGLShader.h" />
+    <ClInclude Include="src\Heron\Platform\OpenGL\OpenGLRendererAPI.h" />
+    <ClInclude Include="src\Heron\Platform\Windows\WindowsWindow.h" />
+    <ClInclude Include="src\Heron\Platform\Windows\WindowsInput.h" />
+    <ClInclude Include="src\Heron\Renderer\GraphicsContext.h" />
+    <ClInclude Include="src\Heron\Renderer\Buffer.h" />
+    <ClInclude Include="src\Heron\Renderer\VertexArray.h" />
+    <ClInclude Include="src\Heron\Renderer\Shader.h" />
+    <ClInclude Include="src\Heron\Renderer\RendererAPI.h" />
+    <ClInclude Include="src\Heron\Renderer\RenderCommand.h" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="vendor\glad\glad.vcxproj">
+      <Project>{D307D53C-DDB3-4246-A227-E86F1CDB3DF0}</Project>
+    </ProjectReference>
+    <ProjectReference Include="vendor\box3d\box3d.vcxproj">
+      <Project>{B033D000-0000-0000-0000-000000000000}</Project>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

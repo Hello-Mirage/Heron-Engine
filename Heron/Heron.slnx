@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/vendor/">
+    <Project Path="vendor/box3d/box3d.vcxproj" Id="b033d000-0000-0000-0000-000000000000" />
+    <Project Path="vendor/glad/glad.vcxproj" Id="d307d53c-ddb3-4246-a227-e86f1cdb3df0" />
+    <Project Path="vendor/glfw/glfw.vcxproj" Id="b5c1e3a0-4f7d-4e8a-9c2b-1d3e5f7a9b0c" />
+  </Folder>
+  <Project Path="../sandbox/sandbox.vcxproj" Id="61f2debe-bb4f-4932-9790-9a71376ebecb" />
+  <Project Path="Heron.vcxproj" Id="a6bd9f20-3570-408b-9c29-e77b0bd126a5" />
+</Solution>
