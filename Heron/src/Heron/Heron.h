@@ -26,6 +26,10 @@
 #include "Heron/Scene/Entity.h"
 #include "Heron/Scene/Components.h"
 
+// ---Scripting-----------------------
+#include "Heron/Scripting/ScriptableEntity.h"
+#include "Heron/Scripting/ScriptRegistry.h"
+
 #include "Events/Event.h"
 #include "Events/ApplicationEvent.h"
 #include "Events/KeyEvent.h"

@@ -20,10 +20,38 @@ SceneHierarchyPanel::SceneHierarchyPanel(QWidget* parent)
 
 void SceneHierarchyPanel::SetContext(Heron::Scene* scene)
 {
+    std::string previousSelectionTag = "";
+    if (m_SelectionContext) {
+        previousSelectionTag = m_SelectionContext.GetComponent<Heron::TagComponent>().Tag;
+    }
+
     m_Context = scene;
     m_SelectionContext = {};
-    emit EntitySelected(m_SelectionContext);
+    
     UpdateHierarchy();
+
+    if (!previousSelectionTag.empty() && m_Context) {
+        auto view = m_Context->GetRegistry().view<Heron::TagComponent>();
+        for (auto entityID : view) {
+            if (view.get<Heron::TagComponent>(entityID).Tag == previousSelectionTag) {
+                m_SelectionContext = Heron::Entity{ entityID, m_Context };
+                break;
+            }
+        }
+    }
+
+    emit EntitySelected(m_SelectionContext);
+    
+    // Select it in the UI tree as well
+    if (m_SelectionContext) {
+        QList<QTreeWidgetItem*> items = m_TreeWidget->findItems(QString::fromStdString(previousSelectionTag), Qt::MatchExactly, 0);
+        if (!items.isEmpty()) {
+            m_TreeWidget->blockSignals(true);
+            m_TreeWidget->clearSelection();
+            items.first()->setSelected(true);
+            m_TreeWidget->blockSignals(false);
+        }
+    }
 }
 
 void SceneHierarchyPanel::UpdateHierarchy()

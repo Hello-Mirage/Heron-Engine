@@ -3,11 +3,18 @@
 #include <Heron/Scripting/ScriptRegistry.h>
 #include <QLabel>
 #include <QDoubleValidator>
+#include <QColorDialog>
+#include <QFileDialog>
+#include <Heron/Renderer/Texture.h>
+#include <QScrollArea>
 
 PropertiesPanel::PropertiesPanel(QWidget* parent)
     : QDockWidget("Properties", parent)
 {
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    QScrollArea* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
 
     m_Container = new QWidget();
     m_MainLayout = new QVBoxLayout(m_Container);
@@ -59,6 +66,9 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     m_RigidBodyGroup = new QGroupBox("RigidBody");
     QFormLayout* rbLayout = new QFormLayout(m_RigidBodyGroup);
     rbLayout->addRow(new QLabel("Type"), new QLabel("Dynamic Body"));
+    m_FixedRotationCB = new QCheckBox();
+    connect(m_FixedRotationCB, &QCheckBox::stateChanged, this, &PropertiesPanel::OnFixedRotationChanged);
+    rbLayout->addRow("Fixed Rotation", m_FixedRotationCB);
     m_MainLayout->addWidget(m_RigidBodyGroup);
 
     // --- Box Collider Group ---
@@ -114,18 +124,108 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     cameraLayout->addRow("Far Clip", m_CameraFar);
     m_MainLayout->addWidget(m_CameraGroup);
 
+    // --- Mesh Group ---
+    m_MeshGroup = new QGroupBox("Mesh Material");
+    QFormLayout* meshLayout = new QFormLayout(m_MeshGroup);
+    m_MeshColorBtn = new QPushButton("Pick Color");
+    m_MeshTextureBtn = new QPushButton("Select Texture...");
+    m_MeshTextureLabel = new QLabel("None");
+
+    connect(m_MeshColorBtn, &QPushButton::clicked, this, &PropertiesPanel::OnMeshColorClicked);
+    connect(m_MeshTextureBtn, &QPushButton::clicked, this, &PropertiesPanel::OnMeshTextureClicked);
+
+    meshLayout->addRow("Color", m_MeshColorBtn);
+    meshLayout->addRow("Texture", m_MeshTextureBtn);
+    meshLayout->addRow("Current:", m_MeshTextureLabel);
+    m_MainLayout->addWidget(m_MeshGroup);
+
     // --- Add Camera Button ---
     m_AddCameraBtn = new QPushButton("Add Camera");
     connect(m_AddCameraBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddCameraComponent);
     m_MainLayout->addWidget(m_AddCameraBtn);
 
-    setWidget(m_Container);
+    // --- Light Group ---
+    m_LightGroup = new QGroupBox("Light");
+    QFormLayout* lightLayout = new QFormLayout(m_LightGroup);
+    m_LightColorBtn = new QPushButton("Pick Color");
+    m_LightIntensity = new QLineEdit(); m_LightIntensity->setValidator(validator);
+    
+    connect(m_LightColorBtn, &QPushButton::clicked, this, &PropertiesPanel::OnLightColorClicked);
+    connect(m_LightIntensity, &QLineEdit::textEdited, this, &PropertiesPanel::OnLightIntensityChanged);
+    
+    lightLayout->addRow("Color", m_LightColorBtn);
+    lightLayout->addRow("Intensity", m_LightIntensity);
+    m_MainLayout->addWidget(m_LightGroup);
+
+    m_AddLightBtn = new QPushButton("Add Light");
+    connect(m_AddLightBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddLightComponent);
+    m_MainLayout->addWidget(m_AddLightBtn);
+
+    // --- Skybox Group ---
+    m_SkyboxGroup = new QGroupBox("Skybox");
+    QFormLayout* skyboxLayout = new QFormLayout(m_SkyboxGroup);
+    m_SkyboxBtnRight = new QPushButton("Select Right...");
+    m_SkyboxBtnLeft = new QPushButton("Select Left...");
+    m_SkyboxBtnTop = new QPushButton("Select Top...");
+    m_SkyboxBtnBottom = new QPushButton("Select Bottom...");
+    m_SkyboxBtnFront = new QPushButton("Select Front...");
+    m_SkyboxBtnBack = new QPushButton("Select Back...");
+
+    connect(m_SkyboxBtnRight, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(0); });
+    connect(m_SkyboxBtnLeft, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(1); });
+    connect(m_SkyboxBtnTop, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(2); });
+    connect(m_SkyboxBtnBottom, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(3); });
+    connect(m_SkyboxBtnFront, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(4); });
+    connect(m_SkyboxBtnBack, &QPushButton::clicked, this, [this]() { OnSkyboxTextureClicked(5); });
+
+    skyboxLayout->addRow("Right (+X)", m_SkyboxBtnRight);
+    skyboxLayout->addRow("Left (-X)", m_SkyboxBtnLeft);
+    skyboxLayout->addRow("Top (+Y)", m_SkyboxBtnTop);
+    skyboxLayout->addRow("Bottom (-Y)", m_SkyboxBtnBottom);
+    skyboxLayout->addRow("Front (+Z)", m_SkyboxBtnFront);
+    skyboxLayout->addRow("Back (-Z)", m_SkyboxBtnBack);
+    m_MainLayout->addWidget(m_SkyboxGroup);
+
+    m_AddSkyboxBtn = new QPushButton("Add Skybox");
+    connect(m_AddSkyboxBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddSkyboxComponent);
+    m_MainLayout->addWidget(m_AddSkyboxBtn);
+
+    scrollArea->setWidget(m_Container);
+    setWidget(scrollArea);
 }
 
 void PropertiesPanel::SetEntity(Heron::Entity entity)
 {
     m_SelectionContext = entity;
     DrawComponents();
+}
+
+void PropertiesPanel::UpdateValues()
+{
+    if (!m_SelectionContext) return;
+
+    if (m_SelectionContext.HasComponent<Heron::TransformComponent>()) {
+        auto& transform = m_SelectionContext.GetComponent<Heron::TransformComponent>();
+        
+        // Block signals to prevent recursive updates
+        m_PosX->blockSignals(true); m_PosY->blockSignals(true); m_PosZ->blockSignals(true);
+        m_RotX->blockSignals(true); m_RotY->blockSignals(true); m_RotZ->blockSignals(true);
+        m_ScaleX->blockSignals(true); m_ScaleY->blockSignals(true); m_ScaleZ->blockSignals(true);
+
+        m_PosX->setText(QString::number(transform.Translation[0]));
+        m_PosY->setText(QString::number(transform.Translation[1]));
+        m_PosZ->setText(QString::number(transform.Translation[2]));
+        m_RotX->setText(QString::number(glm::degrees(transform.Rotation[0])));
+        m_RotY->setText(QString::number(glm::degrees(transform.Rotation[1])));
+        m_RotZ->setText(QString::number(glm::degrees(transform.Rotation[2])));
+        m_ScaleX->setText(QString::number(transform.Scale[0]));
+        m_ScaleY->setText(QString::number(transform.Scale[1]));
+        m_ScaleZ->setText(QString::number(transform.Scale[2]));
+
+        m_PosX->blockSignals(false); m_PosY->blockSignals(false); m_PosZ->blockSignals(false);
+        m_RotX->blockSignals(false); m_RotY->blockSignals(false); m_RotZ->blockSignals(false);
+        m_ScaleX->blockSignals(false); m_ScaleY->blockSignals(false); m_ScaleZ->blockSignals(false);
+    }
 }
 
 void PropertiesPanel::DrawComponents()
@@ -139,6 +239,11 @@ void PropertiesPanel::DrawComponents()
         m_AddBoxColliderBtn->hide();
         m_ScriptGroup->hide();
         m_AddScriptBtn->hide();
+        m_CameraGroup->hide();
+        m_AddCameraBtn->hide();
+        m_MeshGroup->hide();
+        m_LightGroup->hide();
+        m_AddLightBtn->hide();
         return;
     }
 
@@ -167,6 +272,10 @@ void PropertiesPanel::DrawComponents()
     }
 
     if (m_SelectionContext.HasComponent<Heron::RigidBody3DComponent>()) {
+        auto& rb = m_SelectionContext.GetComponent<Heron::RigidBody3DComponent>();
+        m_FixedRotationCB->blockSignals(true);
+        m_FixedRotationCB->setChecked(rb.FixedRotation);
+        m_FixedRotationCB->blockSignals(false);
         m_RigidBodyGroup->show();
         m_AddRigidBodyBtn->hide();
     } else {
@@ -240,6 +349,69 @@ void PropertiesPanel::DrawComponents()
         m_CameraGroup->hide();
         m_AddCameraBtn->show();
     }
+
+    if (m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
+        auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
+        
+        QColor c((int)(mesh.Color[0]*255), (int)(mesh.Color[1]*255), (int)(mesh.Color[2]*255), (int)(mesh.Color[3]*255));
+        QString style = QString("background-color: %1;").arg(c.name());
+        m_MeshColorBtn->setStyleSheet(style);
+
+        if (mesh.TexturePath.empty()) {
+            m_MeshTextureLabel->setText("None");
+        } else {
+            QString path = QString::fromStdString(mesh.TexturePath);
+            QFileInfo fi(path);
+            m_MeshTextureLabel->setText(fi.fileName());
+        }
+        
+        m_MeshGroup->show();
+    } else {
+        m_MeshGroup->hide();
+    }
+
+    if (m_SelectionContext.HasComponent<Heron::LightComponent>()) {
+        auto& light = m_SelectionContext.GetComponent<Heron::LightComponent>();
+        
+        QColor c((int)(light.Color[0]*255), (int)(light.Color[1]*255), (int)(light.Color[2]*255));
+        QString style = QString("background-color: %1;").arg(c.name());
+        m_LightColorBtn->setStyleSheet(style);
+
+        m_LightIntensity->blockSignals(true);
+        m_LightIntensity->setText(QString::number(light.Intensity));
+        m_LightIntensity->blockSignals(false);
+
+        m_LightGroup->show();
+        m_AddLightBtn->hide();
+    } else {
+        m_LightGroup->hide();
+        m_AddLightBtn->show();
+    }
+
+    if (m_SelectionContext.HasComponent<Heron::SkyboxComponent>()) {
+        auto& sc = m_SelectionContext.GetComponent<Heron::SkyboxComponent>();
+        
+        auto setBtnText = [](QPushButton* btn, const std::string& path, const char* defaultText) {
+            if (path.empty()) btn->setText(defaultText);
+            else {
+                QFileInfo fi(QString::fromStdString(path));
+                btn->setText(fi.fileName());
+            }
+        };
+
+        setBtnText(m_SkyboxBtnRight, sc.TexturePaths[0], "Select Right...");
+        setBtnText(m_SkyboxBtnLeft, sc.TexturePaths[1], "Select Left...");
+        setBtnText(m_SkyboxBtnTop, sc.TexturePaths[2], "Select Top...");
+        setBtnText(m_SkyboxBtnBottom, sc.TexturePaths[3], "Select Bottom...");
+        setBtnText(m_SkyboxBtnFront, sc.TexturePaths[4], "Select Front...");
+        setBtnText(m_SkyboxBtnBack, sc.TexturePaths[5], "Select Back...");
+
+        m_SkyboxGroup->show();
+        m_AddSkyboxBtn->hide();
+    } else {
+        m_SkyboxGroup->hide();
+        m_AddSkyboxBtn->show();
+    }
 }
 
 void PropertiesPanel::OnTagChanged(const QString& text)
@@ -271,6 +443,14 @@ void PropertiesPanel::OnTransformChanged()
         collider.HalfSize[0] = m_SizeX->text().toFloat() / 2.0f;
         collider.HalfSize[1] = m_SizeY->text().toFloat() / 2.0f;
         collider.HalfSize[2] = m_SizeZ->text().toFloat() / 2.0f;
+    }
+}
+
+void PropertiesPanel::OnFixedRotationChanged()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::RigidBody3DComponent>()) {
+        auto& rb = m_SelectionContext.GetComponent<Heron::RigidBody3DComponent>();
+        rb.FixedRotation = m_FixedRotationCB->isChecked();
     }
 }
 
@@ -332,5 +512,99 @@ void PropertiesPanel::OnCameraChanged()
         camera.FOV = m_CameraFOV->text().toFloat();
         camera.NearClip = m_CameraNear->text().toFloat();
         camera.FarClip = m_CameraFar->text().toFloat();
+    }
+}
+
+void PropertiesPanel::OnMeshColorClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
+        auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
+        QColor initial((int)(mesh.Color[0]*255), (int)(mesh.Color[1]*255), (int)(mesh.Color[2]*255), (int)(mesh.Color[3]*255));
+        
+        QColor newColor = QColorDialog::getColor(initial, this, "Pick Mesh Color", QColorDialog::ShowAlphaChannel);
+        if (newColor.isValid()) {
+            mesh.Color[0] = newColor.redF();
+            mesh.Color[1] = newColor.greenF();
+            mesh.Color[2] = newColor.blueF();
+            mesh.Color[3] = newColor.alphaF();
+            DrawComponents();
+        }
+    }
+}
+
+void PropertiesPanel::OnMeshTextureClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
+        QString fileName = QFileDialog::getOpenFileName(this, "Select Texture", "", "Images (*.png *.jpg *.jpeg *.bmp *.tga)");
+        if (!fileName.isEmpty()) {
+            auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
+            mesh.TexturePath = fileName.toStdString();
+            mesh.Texture = Heron::Texture2D::Create(mesh.TexturePath);
+            DrawComponents();
+        }
+    }
+}
+
+void PropertiesPanel::OnAddLightComponent()
+{
+    if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::LightComponent>()) {
+        m_SelectionContext.AddComponent<Heron::LightComponent>();
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnLightColorClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::LightComponent>()) {
+        auto& light = m_SelectionContext.GetComponent<Heron::LightComponent>();
+        QColor initial((int)(light.Color[0]*255), (int)(light.Color[1]*255), (int)(light.Color[2]*255));
+        
+        QColor newColor = QColorDialog::getColor(initial, this, "Pick Light Color");
+        if (newColor.isValid()) {
+            light.Color[0] = newColor.redF();
+            light.Color[1] = newColor.greenF();
+            light.Color[2] = newColor.blueF();
+            DrawComponents();
+        }
+    }
+}
+
+void PropertiesPanel::OnLightIntensityChanged()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::LightComponent>()) {
+        auto& light = m_SelectionContext.GetComponent<Heron::LightComponent>();
+        light.Intensity = m_LightIntensity->text().toFloat();
+    }
+}
+
+void PropertiesPanel::OnAddSkyboxComponent()
+{
+    if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::SkyboxComponent>()) {
+        m_SelectionContext.AddComponent<Heron::SkyboxComponent>();
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnSkyboxTextureClicked(int faceIndex)
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::SkyboxComponent>()) {
+        QString fileName = QFileDialog::getOpenFileName(this, "Select Skybox Texture", "", "Images (*.png *.jpg *.jpeg *.bmp *.tga)");
+        if (!fileName.isEmpty()) {
+            auto& sc = m_SelectionContext.GetComponent<Heron::SkyboxComponent>();
+            sc.TexturePaths[faceIndex] = fileName.toStdString();
+            
+            // Try to load cubemap if all faces are present
+            bool hasAll = true;
+            for (int i=0; i<6; i++) {
+                if (sc.TexturePaths[i].empty()) hasAll = false;
+            }
+            if (hasAll) {
+                std::vector<std::string> paths;
+                for (int i=0; i<6; i++) paths.push_back(sc.TexturePaths[i]);
+                sc.Texture = Heron::TextureCube::Create(paths);
+            }
+            
+            DrawComponents();
+        }
     }
 }

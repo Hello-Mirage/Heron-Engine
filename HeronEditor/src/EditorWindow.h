@@ -26,6 +26,12 @@ private slots:
     void OnSaveScene();
     void OnSaveSceneAs();
 
+    void OnCompile();
+
+    void OnToggleMoveGizmo();
+    void OnToggleRotateGizmo();
+    void OnToggleScaleGizmo();
+
 private:
     void SetupDocking();
     void CreateHierarchyPanel();
@@ -34,13 +40,21 @@ private:
     void CreateMenuBar();
     void CreateToolBar();
 
+    void LoadGameDLL();
+    void UnloadGameDLL();
+
     ViewportWidget* m_Viewport;
     SceneHierarchyPanel* m_HierarchyPanel;
     PropertiesPanel* m_PropertiesPanel;
     QToolBar* m_ToolBar;
 
+    QAction* m_ActionMove;
+    QAction* m_ActionRotate;
+    QAction* m_ActionScale;
+
     QFileSystemModel* m_FileModel;
     QTreeView* m_FileTree;
 
     QString m_CurrentScenePath;
+    void* m_GameDLLModule = nullptr;
 };

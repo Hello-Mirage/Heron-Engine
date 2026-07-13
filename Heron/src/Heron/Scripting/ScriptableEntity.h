@@ -24,6 +24,18 @@ namespace Heron {
 		virtual void OnUpdate(float dt) {}
 		virtual void OnDestroy() {}
 
+		Entity Instantiate(const std::string& name = "Entity") {
+			return m_Entity.m_Scene->CreateEntity(name);
+		}
+
+		void Destroy(Entity entity) {
+			m_Entity.m_Scene->DestroyEntity(entity);
+		}
+
+		Entity FindEntityByName(const std::string& name) {
+			return m_Entity.m_Scene->FindEntityByName(name);
+		}
+
 	private:
 		Entity m_Entity;
 		friend class Scene;

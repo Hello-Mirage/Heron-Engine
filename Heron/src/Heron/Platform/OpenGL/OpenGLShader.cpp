@@ -109,4 +109,9 @@ namespace Heron {
 		glUniform4f(location, value.x, value.y, value.z, value.w);
 	}
 
+	void OpenGLShader::SetInt(const std::string& name, int value) {
+		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+		glUniform1i(location, value);
+	}
+
 }

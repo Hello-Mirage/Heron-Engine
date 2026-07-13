@@ -37,7 +37,12 @@ namespace Heron {
 
 	struct RigidBody3DComponent {
 		b3BodyType Type = b3_staticBody;
+		bool FixedRotation = false;
 		b3BodyId RuntimeBody = b3_nullBodyId;
+
+		// Used to track if scripts/gizmos modified the transform this frame
+		float PreviousTranslation[3] = { 0.0f, 0.0f, 0.0f };
+		float PreviousRotation[3] = { 0.0f, 0.0f, 0.0f };
 
 		RigidBody3DComponent() = default;
 		RigidBody3DComponent(const RigidBody3DComponent&) = default;
@@ -61,6 +66,14 @@ namespace Heron {
 		CameraComponent(const CameraComponent&) = default;
 	};
 
+	struct LightComponent {
+		float Color[3] = { 1.0f, 1.0f, 1.0f };
+		float Intensity = 1.0f;
+
+		LightComponent() = default;
+		LightComponent(const LightComponent&) = default;
+	};
+
 	enum class PrimitiveType {
 		None = 0,
 		Cube,
@@ -72,6 +85,8 @@ namespace Heron {
 	struct MeshComponent {
 		PrimitiveType Type = PrimitiveType::Cube;
 		float Color[4] = { 0.8f, 0.8f, 0.8f, 1.0f };
+		Ref<class Texture2D> Texture;
+		std::string TexturePath = ""; // Keep track of path for UI
 
 		MeshComponent() = default;
 		MeshComponent(const MeshComponent&) = default;
@@ -88,6 +103,14 @@ namespace Heron {
 		NativeScriptComponent() = default;
 		NativeScriptComponent(const NativeScriptComponent& other)
 			: ScriptName(other.ScriptName), Instance(nullptr) {}
+	};
+
+	struct SkyboxComponent {
+		std::string TexturePaths[6]; // Right, Left, Top, Bottom, Front, Back
+		Ref<class TextureCube> Texture = nullptr;
+
+		SkyboxComponent() = default;
+		SkyboxComponent(const SkyboxComponent&) = default;
 	};
 
 }

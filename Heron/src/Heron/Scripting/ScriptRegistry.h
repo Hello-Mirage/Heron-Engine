@@ -13,17 +13,9 @@ namespace Heron {
 	public:
 		using CreateFn = std::function<ScriptableEntity*()>;
 
-		static void Register(const std::string& name, CreateFn fn) {
-			GetRegistry()[name] = fn;
-		}
-
-		static ScriptableEntity* Create(const std::string& name) {
-			auto& reg = GetRegistry();
-			auto it = reg.find(name);
-			if (it != reg.end())
-				return it->second();
-			return nullptr;
-		}
+		static void Register(const std::string& name, CreateFn fn);
+		static void Unregister(const std::string& name);
+		static ScriptableEntity* Create(const std::string& name);
 
 		static std::vector<std::string> GetRegisteredNames() {
 			std::vector<std::string> names;
@@ -33,16 +25,17 @@ namespace Heron {
 		}
 
 	private:
-		static std::unordered_map<std::string, CreateFn>& GetRegistry() {
-			static std::unordered_map<std::string, CreateFn> s_Registry;
-			return s_Registry;
-		}
+		static std::unordered_map<std::string, CreateFn>& GetRegistry();
 	};
 
 	// Helper struct for auto-registration via static initialization
 	struct ScriptRegistrar {
-		ScriptRegistrar(const std::string& name, ScriptRegistry::CreateFn fn) {
+		std::string m_Name;
+		ScriptRegistrar(const std::string& name, ScriptRegistry::CreateFn fn) : m_Name(name) {
 			ScriptRegistry::Register(name, fn);
+		}
+		~ScriptRegistrar() {
+			ScriptRegistry::Unregister(m_Name);
 		}
 	};
 

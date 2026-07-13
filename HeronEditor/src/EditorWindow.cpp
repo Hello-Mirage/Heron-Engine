@@ -15,6 +15,8 @@
 #include <QMenu>
 #include <QAction>
 #include <Heron/Scene/SceneSerializer.h>
+#include <windows.h>
+#include <QProcess>
 
 EditorWindow::EditorWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -63,6 +65,12 @@ void EditorWindow::CreatePropertiesPanel()
     // Connect selection in hierarchy to properties
     connect(m_HierarchyPanel, &SceneHierarchyPanel::EntitySelected,
             m_PropertiesPanel, &PropertiesPanel::SetEntity);
+
+    connect(m_HierarchyPanel, &SceneHierarchyPanel::EntitySelected,
+            m_Viewport, &ViewportWidget::SetSelectedEntity);
+
+    connect(m_Viewport, &ViewportWidget::PropertiesChanged,
+            m_PropertiesPanel, &PropertiesPanel::UpdateValues);
 }
 
 void EditorWindow::CreateFileExplorerPanel()
@@ -143,15 +151,19 @@ void EditorWindow::CreateToolBar()
     m_ToolBar = addToolBar("Playback");
     
     QAction* saveAction = new QAction("💾 Save", this);
+    QAction* compileAction = new QAction("🔨 Compile", this);
     QAction* playAction = new QAction("▶ Play", this);
     QAction* stopAction = new QAction("⏹ Stop", this);
     
     m_ToolBar->addAction(saveAction);
     m_ToolBar->addSeparator();
+    m_ToolBar->addAction(compileAction);
+    m_ToolBar->addSeparator();
     m_ToolBar->addAction(playAction);
     m_ToolBar->addAction(stopAction);
 
     connect(saveAction, &QAction::triggered, this, &EditorWindow::OnSaveScene);
+    connect(compileAction, &QAction::triggered, this, &EditorWindow::OnCompile);
 
     connect(playAction, &QAction::triggered, this, [this]() {
         m_Viewport->SetSceneState(ViewportWidget::SceneState::Play);
@@ -160,6 +172,56 @@ void EditorWindow::CreateToolBar()
     connect(stopAction, &QAction::triggered, this, [this]() {
         m_Viewport->SetSceneState(ViewportWidget::SceneState::Edit);
     });
+
+    m_ToolBar->addSeparator();
+
+    m_ActionMove = new QAction("Move", this);
+    m_ActionMove->setCheckable(true);
+    m_ActionRotate = new QAction("Rotate", this);
+    m_ActionRotate->setCheckable(true);
+    m_ActionScale = new QAction("Scale", this);
+    m_ActionScale->setCheckable(true);
+
+    m_ToolBar->addAction(m_ActionMove);
+    m_ToolBar->addAction(m_ActionRotate);
+    m_ToolBar->addAction(m_ActionScale);
+
+    connect(m_ActionMove, &QAction::triggered, this, &EditorWindow::OnToggleMoveGizmo);
+    connect(m_ActionRotate, &QAction::triggered, this, &EditorWindow::OnToggleRotateGizmo);
+    connect(m_ActionScale, &QAction::triggered, this, &EditorWindow::OnToggleScaleGizmo);
+}
+
+void EditorWindow::OnToggleMoveGizmo()
+{
+    if (m_ActionMove->isChecked()) {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::Translate);
+        m_ActionRotate->setChecked(false);
+        m_ActionScale->setChecked(false);
+    } else {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::None);
+    }
+}
+
+void EditorWindow::OnToggleRotateGizmo()
+{
+    if (m_ActionRotate->isChecked()) {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::Rotate);
+        m_ActionMove->setChecked(false);
+        m_ActionScale->setChecked(false);
+    } else {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::None);
+    }
+}
+
+void EditorWindow::OnToggleScaleGizmo()
+{
+    if (m_ActionScale->isChecked()) {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::Scale);
+        m_ActionMove->setChecked(false);
+        m_ActionRotate->setChecked(false);
+    } else {
+        m_Viewport->SetGizmoMode(ViewportWidget::GizmoMode::None);
+    }
 }
 
 void EditorWindow::OnNewProject()
@@ -258,5 +320,78 @@ void EditorWindow::OnSaveSceneAs()
         m_CurrentScenePath = filepath;
         Heron::SceneSerializer serializer(m_Viewport->GetSceneRef());
         serializer.Serialize(m_CurrentScenePath.toStdString());
+    }
+}
+
+void EditorWindow::OnCompile()
+{
+    HRN_CORE_INFO("Compiling GameProject...");
+    
+    // Stop playback if playing
+    if (m_Viewport->GetSceneState() == ViewportWidget::SceneState::Play) {
+        m_Viewport->SetSceneState(ViewportWidget::SceneState::Edit);
+    }
+    
+    UnloadGameDLL();
+    
+    QProcess process;
+    process.setWorkingDirectory(QDir::currentPath());
+    process.start("cmake", QStringList() << "--build" << "build" << "--config" << "Debug" << "--target" << "GameProject");
+    
+    process.waitForFinished(-1);
+    
+    if (process.exitCode() == 0) {
+        HRN_CORE_INFO("Compilation successful. Reloading DLL...");
+        LoadGameDLL();
+        
+        // Refresh scene
+        if (!m_CurrentScenePath.isEmpty()) {
+            OnSaveScene(); // Save current state
+            OnOpenScene(); // Reload to pick up new scripts
+        }
+    } else {
+        HRN_CORE_ERROR("Compilation failed!");
+        HRN_CORE_ERROR("{0}", process.readAllStandardError().toStdString());
+    }
+}
+
+void EditorWindow::LoadGameDLL()
+{
+    QString dllPath = QDir::currentPath() + "/build/bin/Debug/GameProject.dll";
+    QString copyPath = QDir::currentPath() + "/build/bin/Debug/GameProject_temp.dll";
+    
+    if (!QFile::exists(dllPath)) {
+        HRN_CORE_WARN("GameProject.dll not found at {0}", dllPath.toStdString());
+        return;
+    }
+    
+    QFile::remove(copyPath);
+    if (QFile::copy(dllPath, copyPath)) {
+        m_GameDLLModule = (void*)LoadLibraryA(copyPath.toStdString().c_str());
+        if (m_GameDLLModule) {
+            HRN_CORE_INFO("Loaded Game DLL from {0}", copyPath.toStdString());
+            
+            // Execute InitializeGame hook
+            typedef void(*InitGameFn)();
+            InitGameFn initFn = (InitGameFn)GetProcAddress((HMODULE)m_GameDLLModule, "InitializeGame");
+            if (initFn) {
+                initFn();
+            } else {
+                HRN_CORE_WARN("InitializeGame not found in Game DLL");
+            }
+        } else {
+            HRN_CORE_ERROR("Failed to load Game DLL");
+        }
+    } else {
+        HRN_CORE_ERROR("Failed to copy Game DLL");
+    }
+}
+
+void EditorWindow::UnloadGameDLL()
+{
+    if (m_GameDLLModule) {
+        FreeLibrary((HMODULE)m_GameDLLModule);
+        m_GameDLLModule = nullptr;
+        HRN_CORE_INFO("Unloaded Game DLL");
     }
 }

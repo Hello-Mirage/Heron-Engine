@@ -17,4 +17,7 @@ namespace Heron {
 		s_ClientLogger->set_level(spdlog::level::trace);
 	}
 
+	Ref<spdlog::logger>& Log::GetCoreLogger() { return s_CoreLogger; }
+	Ref<spdlog::logger>& Log::GetClientLogger() { return s_ClientLogger; }
+
 }

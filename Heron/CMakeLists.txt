@@ -1,8 +1,7 @@
 project(Heron)
 
 # === GLAD ===
-add_library(glad STATIC vendor/glad/src/gl.c)
-target_include_directories(glad PUBLIC vendor/glad/include)
+# We build glad directly into Heron so we can properly export its function pointers.
 
 # === Box3D (Real) ===
 set(BOX3D_SAMPLES OFF CACHE BOOL "" FORCE)
@@ -26,12 +25,16 @@ file(GLOB IMGUI_SOURCES
 list(APPEND IMGUI_SOURCES
     "vendor/imgui/backends/imgui_impl_glfw.cpp"
     "vendor/imgui/backends/imgui_impl_opengl3.cpp"
+    "vendor/glad/src/gl.c"
+    "vendor/stb_image/stb_image.cpp"
 )
+set_source_files_properties("vendor/glad/src/gl.c" PROPERTIES LANGUAGE CXX)
 
-add_library(Heron STATIC ${HERON_SOURCES} ${IMGUI_SOURCES})
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+add_library(Heron SHARED ${HERON_SOURCES} ${IMGUI_SOURCES})
 
-target_compile_definitions(Heron PUBLIC HRN_PLATFORM_WINDOWS)
-target_compile_definitions(Heron PRIVATE IMGUI_IMPL_OPENGL_LOADER_GLAD)
+target_compile_definitions(Heron PUBLIC HRN_PLATFORM_WINDOWS GLAD_API_CALL_EXPORT)
+target_compile_definitions(Heron PRIVATE IMGUI_IMPL_OPENGL_LOADER_GLAD GLAD_API_CALL_EXPORT_BUILD)
 target_compile_options(Heron PUBLIC /utf-8)
 
 target_include_directories(Heron
@@ -41,6 +44,8 @@ target_include_directories(Heron
         vendor/glfw/include
         vendor/entt/src
         vendor/imgui
+        vendor/glad/include
+        vendor/stb_image
 )
 
 # === GLFW ===
@@ -49,7 +54,7 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/glfw)
 
-target_link_libraries(Heron PUBLIC glad box3d glfw glm::glm yaml-cpp)
+target_link_libraries(Heron PUBLIC box3d glfw glm::glm yaml-cpp)
 target_link_libraries(Heron PUBLIC opengl32 gdi32 user32 shell32)
 
 # Precompiled Header

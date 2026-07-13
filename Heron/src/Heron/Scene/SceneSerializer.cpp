@@ -2,6 +2,7 @@
 #include "SceneSerializer.h"
 #include "Entity.h"
 #include "Components.h"
+#include "Heron/Renderer/Texture.h"
 
 #include <yaml-cpp/yaml.h>
 #include <fstream>
@@ -96,6 +97,7 @@ namespace Heron {
 			out << YAML::BeginMap;
 			auto& rb = entity.GetComponent<RigidBody3DComponent>();
 			out << YAML::Key << "Type" << YAML::Value << (int)rb.Type;
+			out << YAML::Key << "FixedRotation" << YAML::Value << rb.FixedRotation;
 			out << YAML::EndMap;
 		}
 
@@ -123,6 +125,28 @@ namespace Heron {
 			out << YAML::Key << "FOV" << YAML::Value << cc.FOV;
 			out << YAML::Key << "NearClip" << YAML::Value << cc.NearClip;
 			out << YAML::Key << "FarClip" << YAML::Value << cc.FarClip;
+			out << YAML::EndMap;
+		}
+
+		if (entity.HasComponent<LightComponent>()) {
+			out << YAML::Key << "LightComponent";
+			out << YAML::BeginMap;
+			auto& lc = entity.GetComponent<LightComponent>();
+			WRITE_VEC3(out, "Color", lc.Color);
+			out << YAML::Key << "Intensity" << YAML::Value << lc.Intensity;
+			out << YAML::EndMap;
+		}
+
+		if (entity.HasComponent<SkyboxComponent>()) {
+			out << YAML::Key << "SkyboxComponent";
+			out << YAML::BeginMap;
+			auto& sc = entity.GetComponent<SkyboxComponent>();
+			out << YAML::Key << "Right" << YAML::Value << sc.TexturePaths[0];
+			out << YAML::Key << "Left" << YAML::Value << sc.TexturePaths[1];
+			out << YAML::Key << "Top" << YAML::Value << sc.TexturePaths[2];
+			out << YAML::Key << "Bottom" << YAML::Value << sc.TexturePaths[3];
+			out << YAML::Key << "Front" << YAML::Value << sc.TexturePaths[4];
+			out << YAML::Key << "Back" << YAML::Value << sc.TexturePaths[5];
 			out << YAML::EndMap;
 		}
 
@@ -206,6 +230,8 @@ namespace Heron {
 				if (rigidBodyComponent) {
 					auto& rb = deserializedEntity.AddComponent<RigidBody3DComponent>();
 					rb.Type = (b3BodyType)rigidBodyComponent["Type"].as<int>();
+					if (rigidBodyComponent["FixedRotation"])
+						rb.FixedRotation = rigidBodyComponent["FixedRotation"].as<bool>();
 				}
 
 				auto boxColliderComponent = entity["BoxCollider3DComponent"];
@@ -229,6 +255,37 @@ namespace Heron {
 					cc.FOV = cameraComponent["FOV"].as<float>();
 					cc.NearClip = cameraComponent["NearClip"].as<float>();
 					cc.FarClip = cameraComponent["FarClip"].as<float>();
+				}
+
+				auto lightComponent = entity["LightComponent"];
+				if (lightComponent) {
+					auto& lc = deserializedEntity.AddComponent<LightComponent>();
+					lc.Color[0] = lightComponent["Color"][0].as<float>();
+					lc.Color[1] = lightComponent["Color"][1].as<float>();
+					lc.Color[2] = lightComponent["Color"][2].as<float>();
+					lc.Intensity = lightComponent["Intensity"].as<float>();
+				}
+
+				auto skyboxComponent = entity["SkyboxComponent"];
+				if (skyboxComponent) {
+					auto& sc = deserializedEntity.AddComponent<SkyboxComponent>();
+					sc.TexturePaths[0] = skyboxComponent["Right"].as<std::string>();
+					sc.TexturePaths[1] = skyboxComponent["Left"].as<std::string>();
+					sc.TexturePaths[2] = skyboxComponent["Top"].as<std::string>();
+					sc.TexturePaths[3] = skyboxComponent["Bottom"].as<std::string>();
+					sc.TexturePaths[4] = skyboxComponent["Front"].as<std::string>();
+					sc.TexturePaths[5] = skyboxComponent["Back"].as<std::string>();
+					
+					// Pre-load the skybox if paths are somewhat valid
+					bool hasAll = true;
+					for (int i=0; i<6; i++) {
+						if (sc.TexturePaths[i].empty()) hasAll = false;
+					}
+					if (hasAll) {
+						std::vector<std::string> paths;
+						for (int i=0; i<6; i++) paths.push_back(sc.TexturePaths[i]);
+						sc.Texture = TextureCube::Create(paths);
+					}
 				}
 			}
 		}

@@ -11,6 +11,8 @@ namespace Heron {
 		virtual void Clear() override;
 
 		virtual void DrawIndexed(const Ref<VertexArray>& vertexArray) override;
+		virtual void DrawLines(const Ref<VertexArray>& vertexArray) override;
+		virtual void DrawLineLoop(const Ref<VertexArray>& vertexArray) override;
 	};
 
 }

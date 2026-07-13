@@ -47,9 +47,11 @@ namespace Heron {
 		CopyComponent<TransformComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<SpriteRendererComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<MeshComponent>(dstRegistry, srcRegistry, enttMap);
+		CopyComponent<LightComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<RigidBody3DComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<BoxCollider3DComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<NativeScriptComponent>(dstRegistry, srcRegistry, enttMap);
+		CopyComponent<SkyboxComponent>(dstRegistry, srcRegistry, enttMap);
 
 		// Reset runtime physics bodies in the new scene
 		auto rbView = dstRegistry.view<RigidBody3DComponent>();
@@ -84,7 +86,33 @@ namespace Heron {
 				nsc.Instance = nullptr;
 			}
 		}
+
+		// Clean up physics body
+		if (m_Registry.any_of<RigidBody3DComponent>((entt::entity)entity)) {
+			auto& rb = m_Registry.get<RigidBody3DComponent>((entt::entity)entity);
+			if (!B3_IS_NULL(rb.RuntimeBody)) {
+				b3DestroyBody(rb.RuntimeBody);
+			}
+		}
+
+		if (m_Registry.any_of<BoxCollider3DComponent>((entt::entity)entity)) {
+			auto& bc = m_Registry.get<BoxCollider3DComponent>((entt::entity)entity);
+			if (!B3_IS_NULL(bc.RuntimeBody)) {
+				b3DestroyBody(bc.RuntimeBody);
+			}
+		}
+
 		m_Registry.destroy(entity);
+	}
+
+	Entity Scene::FindEntityByName(const std::string& name) {
+		auto view = m_Registry.view<TagComponent>();
+		for (auto entity : view) {
+			const auto& tc = view.get<TagComponent>(entity);
+			if (tc.Tag == name)
+				return Entity{ entity, this };
+		}
+		return {};
 	}
 
 	void Scene::OnUpdateEditor(float deltaTime) {
@@ -128,8 +156,22 @@ namespace Heron {
 					rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 1, 0}, transform.Rotation[1]));
 					rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 0, 1}, transform.Rotation[2]));
 					bodyDef.rotation = rot;
+					
+					if (rb.FixedRotation) {
+						bodyDef.motionLocks.angularX = true;
+						bodyDef.motionLocks.angularY = true;
+						bodyDef.motionLocks.angularZ = true;
+					}
 
 					rb.RuntimeBody = b3CreateBody(m_PhysicsWorld, &bodyDef);
+
+					// Initialize previous transform tracking
+					rb.PreviousTranslation[0] = transform.Translation[0];
+					rb.PreviousTranslation[1] = transform.Translation[1];
+					rb.PreviousTranslation[2] = transform.Translation[2];
+					rb.PreviousRotation[0] = transform.Rotation[0];
+					rb.PreviousRotation[1] = transform.Rotation[1];
+					rb.PreviousRotation[2] = transform.Rotation[2];
 
 					// Add Box Collider if present
 					if (m_Registry.all_of<BoxCollider3DComponent>(e)) {
@@ -143,14 +185,44 @@ namespace Heron {
 						box.RuntimeBody = rb.RuntimeBody;
 					}
 				} else {
-					// Body already exists - sync transform changes made by scripts this frame TO the physics engine
-					b3Pos pos = { transform.Translation[0], transform.Translation[1], transform.Translation[2] };
-					
-					b3Quat rot = b3MakeQuatFromAxisAngle({1, 0, 0}, transform.Rotation[0]);
-					rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 1, 0}, transform.Rotation[1]));
-					rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 0, 1}, transform.Rotation[2]));
+					// Body already exists - check if script or gizmo modified the ECS transform
+					bool positionChanged = false;
+					b3Vec3 desiredVel = b3Body_GetLinearVelocity(rb.RuntimeBody);
 
-					b3Body_SetTransform(rb.RuntimeBody, pos, rot);
+					if (transform.Translation[0] != rb.PreviousTranslation[0]) {
+					    desiredVel.x = (transform.Translation[0] - rb.PreviousTranslation[0]) / deltaTime;
+					    positionChanged = true;
+					}
+					if (transform.Translation[1] != rb.PreviousTranslation[1]) {
+					    desiredVel.y = (transform.Translation[1] - rb.PreviousTranslation[1]) / deltaTime;
+					    positionChanged = true;
+					}
+					if (transform.Translation[2] != rb.PreviousTranslation[2]) {
+					    desiredVel.z = (transform.Translation[2] - rb.PreviousTranslation[2]) / deltaTime;
+					    positionChanged = true;
+					}
+
+					bool rotationChanged = false;
+					if (transform.Rotation[0] != rb.PreviousRotation[0] ||
+					    transform.Rotation[1] != rb.PreviousRotation[1] ||
+					    transform.Rotation[2] != rb.PreviousRotation[2]) {
+					    rotationChanged = true;
+					}
+
+					if (positionChanged) {
+					    b3Body_SetLinearVelocity(rb.RuntimeBody, desiredVel);
+					    b3Body_SetAwake(rb.RuntimeBody, true);
+					}
+					
+					if (rotationChanged && !rb.FixedRotation) {
+					    b3Quat rot = b3MakeQuatFromAxisAngle({1, 0, 0}, transform.Rotation[0]);
+					    rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 1, 0}, transform.Rotation[1]));
+					    rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 0, 1}, transform.Rotation[2]));
+					    
+					    b3Pos pos = b3Body_GetPosition(rb.RuntimeBody);
+					    b3Body_SetTransform(rb.RuntimeBody, pos, rot);
+					    b3Body_SetAwake(rb.RuntimeBody, true);
+					}
 				}
 			}
 
@@ -206,6 +278,14 @@ namespace Heron {
 					float siny_cosp = 2.0f * (qw * qz + qx * qy);
 					float cosy_cosp = 1.0f - 2.0f * (qy * qy + qz * qz);
 					transform.Rotation[2] = atan2f(siny_cosp, cosy_cosp);
+
+					// Store these values so we can detect script/gizmo modifications next frame
+					rb.PreviousTranslation[0] = transform.Translation[0];
+					rb.PreviousTranslation[1] = transform.Translation[1];
+					rb.PreviousTranslation[2] = transform.Translation[2];
+					rb.PreviousRotation[0] = transform.Rotation[0];
+					rb.PreviousRotation[1] = transform.Rotation[1];
+					rb.PreviousRotation[2] = transform.Rotation[2];
 				}
 			}
 		}

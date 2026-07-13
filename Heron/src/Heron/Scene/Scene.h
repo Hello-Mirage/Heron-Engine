@@ -16,6 +16,7 @@ namespace Heron {
 
 		Entity CreateEntity(const std::string& name = std::string());
 		void DestroyEntity(Entity entity);
+		Entity FindEntityByName(const std::string& name);
 
 		void OnUpdateEditor(float deltaTime);
 		void OnUpdateRuntime(float deltaTime);

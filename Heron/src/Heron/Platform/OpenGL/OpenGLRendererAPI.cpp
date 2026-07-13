@@ -22,4 +22,12 @@ namespace Heron {
 		glDrawElements(GL_TRIANGLES, vertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
 	}
 
+	void OpenGLRendererAPI::DrawLines(const Ref<VertexArray>& vertexArray) {
+		glDrawElements(GL_LINES, vertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
+	}
+
+	void OpenGLRendererAPI::DrawLineLoop(const Ref<VertexArray>& vertexArray) {
+		glDrawElements(GL_LINE_LOOP, vertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
+	}
+
 }
