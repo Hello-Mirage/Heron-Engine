@@ -563,48 +563,43 @@ void ViewportWidget::RenderEntities()
 
     auto& registry = m_ActiveScene->GetRegistry();
 
-    // Find the first light
+    // Find the first directional light (shared by both OpenGL and Vulkan paths)
     bool hasLight = false;
+    glm::vec3 lightDir(0.0f);
+    glm::vec3 lightColor(1.0f);
+    float lightIntensity = 1.0f;
+
     auto lightView = registry.view<Heron::TransformComponent, Heron::LightComponent>();
     for (auto entity : lightView) {
         auto [transform, light] = lightView.get<Heron::TransformComponent, Heron::LightComponent>(entity);
-        m_MeshShader->SetInt("u_HasLight", 1);
         
-        // Calculate forward direction from Euler rotation
         glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), transform.Rotation[0], glm::vec3(1, 0, 0))
                          * glm::rotate(glm::mat4(1.0f), transform.Rotation[1], glm::vec3(0, 1, 0))
                          * glm::rotate(glm::mat4(1.0f), transform.Rotation[2], glm::vec3(0, 0, 1));
-        glm::vec3 lightDir = glm::normalize(glm::vec3(rotMat * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-        m_MeshShader->SetFloat3("u_LightDir", lightDir);
-        m_MeshShader->SetFloat3("u_LightColor", glm::vec3(light.Color[0], light.Color[1], light.Color[2]));
-        m_MeshShader->SetFloat("u_LightIntensity", light.Intensity);
+        lightDir = glm::normalize(glm::vec3(rotMat * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+        lightColor = glm::vec3(light.Color[0], light.Color[1], light.Color[2]);
+        lightIntensity = light.Intensity;
         hasLight = true;
         break; // Only support one directional light for now
     }
 
-    if (!hasLight) {
-        m_MeshShader->SetInt("u_HasLight", 0);
+    // OpenGL path: set uniforms individually
+    m_MeshShader->SetInt("u_HasLight", hasLight ? 1 : 0);
+    if (hasLight) {
+        m_MeshShader->SetFloat3("u_LightDir", lightDir);
+        m_MeshShader->SetFloat3("u_LightColor", lightColor);
+        m_MeshShader->SetFloat("u_LightIntensity", lightIntensity);
     }
 
+    // Vulkan path: upload all scene data to UBO in one shot
     if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
         Heron::VulkanShader::SceneData sceneData{};
         sceneData.ViewProjection = viewProj;
         sceneData.HasLight = hasLight ? 1 : 0;
         if (hasLight) {
-            // Find the light again to extract data, or just use variables since we only have one light
-            auto lightView2 = registry.view<Heron::TransformComponent, Heron::LightComponent>();
-            for (auto entity : lightView2) {
-                auto [transform, light] = lightView2.get<Heron::TransformComponent, Heron::LightComponent>(entity);
-                glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), transform.Rotation[0], glm::vec3(1, 0, 0))
-                                 * glm::rotate(glm::mat4(1.0f), transform.Rotation[1], glm::vec3(0, 1, 0))
-                                 * glm::rotate(glm::mat4(1.0f), transform.Rotation[2], glm::vec3(0, 0, 1));
-                glm::vec3 lightDir = glm::normalize(glm::vec3(rotMat * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-                sceneData.LightDir = glm::vec4(lightDir, 0.0f);
-                sceneData.LightColor = glm::vec4(light.Color[0], light.Color[1], light.Color[2], 0.0f);
-                sceneData.LightIntensity = light.Intensity;
-                break;
-            }
+            sceneData.LightDir = glm::vec4(lightDir, 0.0f);
+            sceneData.LightColor = glm::vec4(lightColor, 0.0f);
+            sceneData.LightIntensity = lightIntensity;
         }
         if (m_MeshShader) std::static_pointer_cast<Heron::VulkanShader>(m_MeshShader)->SetSceneData(sceneData);
         if (m_GizmoShader) std::static_pointer_cast<Heron::VulkanShader>(m_GizmoShader)->SetSceneData(sceneData);
@@ -792,10 +787,12 @@ void ViewportWidget::paintGL()
 		// Bind dummy texture to slot 0 for Vulkan descriptor set validation
 		if (m_WhiteTexture) m_WhiteTexture->Bind(0);
 
-		// Map these to the struct expected by Push Constants in VulkanShader
-		// We hijacked u_ViewProjection as u_Proj and u_Model as u_View
-		m_GridShader->SetMat4("u_ViewProjection", m_Camera.GetProjection());
-		m_GridShader->SetMat4("u_Model", m_Camera.GetViewMatrix());
+		// OpenGL path: pass projection and view separately via uniforms
+		if (!isVulkan) {
+			m_GridShader->SetMat4("u_ViewProjection", m_Camera.GetProjection());
+			m_GridShader->SetMat4("u_Model", m_Camera.GetViewMatrix());
+		}
+		// Vulkan path: Grid reads u_ViewProjection from SceneData UBO (set in RenderEntities)
 		
 		m_GridVAO->Bind();
 		m_GridShader->Bind();
