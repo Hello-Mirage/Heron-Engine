@@ -3,6 +3,7 @@
 
 #include "Heron/Renderer/RendererAPI.h"
 #include "Heron/Platform/OpenGL/OpenGLTexture.h"
+#include "Heron/Platform/Vulkan/VulkanTexture.h"
 
 namespace Heron {
 
@@ -12,6 +13,7 @@ namespace Heron {
 		{
 			case RendererAPI::API::None:    HRN_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
 			case RendererAPI::API::OpenGL:  return CreateRef<OpenGLTexture2D>(width, height);
+			case RendererAPI::API::Vulkan:  return CreateRef<VulkanTexture2D>(width, height);
 		}
 
 		HRN_CORE_ASSERT(false, "Unknown RendererAPI!");
@@ -24,6 +26,7 @@ namespace Heron {
 		{
 			case RendererAPI::API::None:    HRN_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
 			case RendererAPI::API::OpenGL:  return CreateRef<OpenGLTexture2D>(path);
+			case RendererAPI::API::Vulkan:  return CreateRef<VulkanTexture2D>(path);
 		}
 
 		HRN_CORE_ASSERT(false, "Unknown RendererAPI!");
@@ -36,6 +39,7 @@ namespace Heron {
 		{
 			case RendererAPI::API::None:    HRN_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
 			case RendererAPI::API::OpenGL:  return CreateRef<OpenGLTextureCube>(paths);
+			case RendererAPI::API::Vulkan:  return CreateRef<VulkanTextureCube>(paths);
 		}
 
 		HRN_CORE_ASSERT(false, "Unknown RendererAPI!");

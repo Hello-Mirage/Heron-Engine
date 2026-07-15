@@ -55,6 +55,8 @@ HERON_REGISTER_SCRIPT(RotateScript);
 
 int main(int argc, char *argv[])
 {
+    freopen("stdout.log", "w", stdout);
+    freopen("stderr.log", "w", stderr);
     Heron::Log::Init();
     QApplication a(argc, argv);
     
@@ -73,9 +75,6 @@ int main(int argc, char *argv[])
     darkPalette.setColor(QPalette::BrightText, Qt::red);
     darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
     darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
-    darkPalette.setColor(QPalette::HighlightedText, Qt::black);
-    a.setPalette(darkPalette);
-
     EditorWindow w;
     w.show();
     return a.exec();

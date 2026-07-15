@@ -3,12 +3,14 @@
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
-#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_vulkan.h"
 
 #include "Heron/Core/Application.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+
+#include "Heron/Platform/Vulkan/VulkanContext.h"
 
 namespace Heron {
 
@@ -40,18 +42,36 @@ namespace Heron {
 		GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
 
 		// Setup Platform/Renderer bindings
-		ImGui_ImplGlfw_InitForOpenGL(window, true);
-		ImGui_ImplOpenGL3_Init("#version 410");
+		ImGui_ImplGlfw_InitForVulkan(window, true);
+
+		auto vulkanContext = Heron::VulkanContext::Get();
+		if (vulkanContext) {
+			ImGui_ImplVulkan_InitInfo init_info = {};
+			init_info.Instance = vulkanContext->GetInstance();
+			init_info.PhysicalDevice = vulkanContext->GetPhysicalDevice();
+			init_info.Device = vulkanContext->GetDevice();
+			init_info.QueueFamily = 0; // Assuming 0
+			init_info.Queue = vulkanContext->GetGraphicsQueue();
+			init_info.PipelineCache = VK_NULL_HANDLE;
+			init_info.DescriptorPool = vulkanContext->GetDescriptorPool();
+			init_info.MinImageCount = 2;
+			init_info.ImageCount = 2;
+			// init_info.RenderPass = vulkanContext->GetSwapchain()->GetRenderPass(); // Need swapchain access!
+			
+			// ImGui_ImplVulkan_Init(&init_info);
+		}
 	}
 
 	void ImGuiLayer::OnDetach() {
-		ImGui_ImplOpenGL3_Shutdown();
+		// ImGui_ImplOpenGL3_Shutdown();
+		// ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 	}
 
 	void ImGuiLayer::Begin() {
-		ImGui_ImplOpenGL3_NewFrame();
+		// ImGui_ImplOpenGL3_NewFrame();
+		// ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 	}
@@ -63,7 +83,8 @@ namespace Heron {
 
 		// Rendering
 		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		// ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		// To do: ImGui_ImplVulkan_RenderDrawData
 
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
 			GLFWwindow* backup_current_context = glfwGetCurrentContext();

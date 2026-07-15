@@ -3,6 +3,7 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
+#include "Heron/Renderer/RendererAPI.h"
 
 namespace Heron {
 
@@ -15,6 +16,11 @@ namespace Heron {
 
 	void EditorCamera::UpdateProjection() {
 		m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
+		if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+			// Convert depth range from OpenGL [-1, 1] to Vulkan [0, 1]
+			m_Projection[2][2] = m_Projection[2][2] * 0.5f + m_Projection[2][3] * 0.5f;
+			m_Projection[3][2] = m_Projection[3][2] * 0.5f + m_Projection[3][3] * 0.5f;
+		}
 		m_ViewProjection = m_Projection * m_ViewMatrix;
 	}
 
@@ -26,6 +32,11 @@ namespace Heron {
 		m_ViewMatrix = glm::inverse(m_ViewMatrix);
 		
 		m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
+		if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+			// Convert depth range from OpenGL [-1, 1] to Vulkan [0, 1]
+			m_Projection[2][2] = m_Projection[2][2] * 0.5f + m_Projection[2][3] * 0.5f;
+			m_Projection[3][2] = m_Projection[3][2] * 0.5f + m_Projection[3][3] * 0.5f;
+		}
 		m_ViewProjection = m_Projection * m_ViewMatrix;
 	}
 

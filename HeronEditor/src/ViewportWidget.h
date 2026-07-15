@@ -1,12 +1,14 @@
 #pragma once
 
-#include <QOpenGLWidget>
+#include <QWidget>
 #include <QTimer>
 #include <Heron/Heron.h>
 #include <Heron/Renderer/EditorCamera.h>
+#include <Heron/Platform/Vulkan/VulkanSwapchain.h>
 #include <unordered_map>
+#include <memory>
 
-class ViewportWidget : public QOpenGLWidget
+class ViewportWidget : public QWidget
 {
     Q_OBJECT
 
@@ -35,9 +37,14 @@ public slots:
     void SetSelectedEntity(Heron::Entity entity) { m_SelectedEntity = entity; }
 
 protected:
-    void initializeGL() override;
-    void resizeGL(int w, int h) override;
-    void paintGL() override;
+    QPaintEngine* paintEngine() const override { return nullptr; }
+
+    void initializeGL();
+    void resizeGL(int w, int h);
+    void paintGL();
+
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -85,6 +92,13 @@ private:
     Heron::EditorCamera m_Camera;
     Heron::Entity m_SelectedEntity;
 
+    // Vulkan Swapchain
+    std::shared_ptr<Heron::VulkanSwapchain> m_VulkanSwapchain;
+    VkSurfaceKHR m_VulkanSurface = VK_NULL_HANDLE;
+
+    // Mouse Tracking
+    QPoint m_LastMousePos;
+
     // Grid rendering
     Heron::Ref<Heron::Shader> m_GridShader;
     Heron::Ref<Heron::VertexArray> m_GridVAO;
@@ -104,4 +118,5 @@ private:
     Heron::Ref<Heron::VertexArray> m_SkyboxVAO;
 
     int m_SpawnCounter = 0;
+    bool m_Initialized = false;
 };

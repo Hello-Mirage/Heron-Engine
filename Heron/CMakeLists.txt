@@ -17,6 +17,11 @@ set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests" FORCE)
 set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools" FORCE)
 add_subdirectory(vendor/yaml-cpp)
 
+# === Vulkan Setup ===
+set(VULKAN_SDK_PATH "D:/vulkansdk")
+set(VULKAN_INCLUDE_DIR "${VULKAN_SDK_PATH}/Include")
+set(VULKAN_LIB "${VULKAN_SDK_PATH}/Lib/vulkan-1.lib")
+
 # === Heron Engine ===
 file(GLOB_RECURSE HERON_SOURCES "src/*.cpp" "src/*.h")
 file(GLOB IMGUI_SOURCES 
@@ -25,6 +30,7 @@ file(GLOB IMGUI_SOURCES
 list(APPEND IMGUI_SOURCES
     "vendor/imgui/backends/imgui_impl_glfw.cpp"
     "vendor/imgui/backends/imgui_impl_opengl3.cpp"
+    "vendor/imgui/backends/imgui_impl_vulkan.cpp"
     "vendor/glad/src/gl.c"
     "vendor/stb_image/stb_image.cpp"
 )
@@ -46,6 +52,7 @@ target_include_directories(Heron
         vendor/imgui
         vendor/glad/include
         vendor/stb_image
+        ${VULKAN_INCLUDE_DIR}
 )
 
 # === GLFW ===
@@ -54,8 +61,28 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/glfw)
 
-target_link_libraries(Heron PUBLIC box3d glfw glm::glm yaml-cpp)
+target_link_libraries(Heron PUBLIC box3d glfw glm::glm yaml-cpp ${VULKAN_LIB})
 target_link_libraries(Heron PUBLIC opengl32 gdi32 user32 shell32)
 
 # Precompiled Header
 target_precompile_headers(Heron PRIVATE src/hrnpch.h)
+
+# === Shader Compilation ===
+set(GLSLC_PATH "${VULKAN_SDK_PATH}/Bin/glslc.exe")
+file(GLOB SHADERS "assets/shaders/*.vert" "assets/shaders/*.frag")
+
+set(SPIRV_OUTPUTS "")
+foreach(SHADER ${SHADERS})
+    get_filename_component(SHADER_NAME ${SHADER} NAME)
+    set(SPIRV_OUT "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/${SHADER_NAME}.spv")
+    add_custom_command(
+        OUTPUT ${SPIRV_OUT}
+        COMMAND ${GLSLC_PATH} ${SHADER} -o ${SPIRV_OUT}
+        DEPENDS ${SHADER}
+        COMMENT "Compiling ${SHADER_NAME} to SPIR-V"
+    )
+    list(APPEND SPIRV_OUTPUTS ${SPIRV_OUT})
+endforeach()
+
+add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_OUTPUTS})
+add_dependencies(Heron CompileShaders)
