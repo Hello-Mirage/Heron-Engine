@@ -7,9 +7,10 @@ Heron Engine is a standalone, lightweight 3D game engine and editor built from s
 The engine is built around a standard Entry Point, Application, and Layer Stack architecture, providing a clean separation between the engine core and the client application.
 
 ### Graphics and Rendering
-*   **OpenGL 3.3 Backend:** The rendering system uses a custom abstraction layer over OpenGL (via GLAD and GLFW).
-*   **ImGui Integration:** The Editor interface is built using Dear ImGui, rendering directly to an OpenGL Framebuffer (the Viewport) rather than the main application window, enabling a modern docked editor layout.
-*   **Renderer API:** Encapsulates Vertex Arrays, Vertex Buffers, Index Buffers, and Shader compilation.
+*   **Dual API Support:** The rendering system features a flexible abstraction layer supporting both **OpenGL 3.3** and **Vulkan**.
+*   **Vulkan Architecture:** Fully implements a modern Vulkan rendering pipeline using Uniform Buffer Objects (UBOs) for global scene data (ViewProjection, Lighting) and optimized Push Constants (strictly within 128-byte limits) for per-entity data (Model Matrix, Color).
+*   **ImGui Integration:** The Editor interface is built using Dear ImGui, rendering directly to an API-agnostic Framebuffer (the Viewport) rather than the main application window, enabling a modern docked editor layout.
+*   **Renderer API:** Encapsulates Vertex Arrays, Vertex Buffers, Index Buffers, Shaders, and Graphics Contexts, allowing seamless switching between OpenGL and Vulkan implementations.
 
 ### Scene and Entity Component System (ECS)
 *   **EnTT Integration:** Heron Engine uses the `entt` library for a robust, high-performance Entity Component System.
