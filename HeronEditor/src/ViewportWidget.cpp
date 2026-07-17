@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QOpenGLContext>
+#include <QLabel>
 
 #include <windows.h>
 #include <vulkan/vulkan_win32.h>
@@ -21,6 +22,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+QLabel* g_ScoreLabel = nullptr;
+
 ViewportWidget::ViewportWidget(QWidget* parent)
     : QWidget(parent)
 {
@@ -33,6 +36,12 @@ ViewportWidget::ViewportWidget(QWidget* parent)
 
     m_ActiveScene = Heron::CreateRef<Heron::Scene>();
 
+    m_ScoreLabel = new QLabel("Score: 0", this);
+    m_ScoreLabel->setStyleSheet("QLabel { color: white; font-size: 24px; font-weight: bold; background-color: rgba(0, 0, 0, 150); padding: 10px; border-radius: 5px; }");
+    m_ScoreLabel->move(20, 20);
+    m_ScoreLabel->hide();
+    g_ScoreLabel = m_ScoreLabel;
+
     connect(&m_Timer, &QTimer::timeout, this, &ViewportWidget::updateGameLoop);
     m_Timer.start(16);
 }
@@ -43,8 +52,9 @@ ViewportWidget::~ViewportWidget()
 
 void ViewportWidget::SetScene(Heron::Ref<Heron::Scene> scene)
 {
+    emit SceneChanged(scene.get());
     m_ActiveScene = scene;
-    emit SceneChanged(m_ActiveScene.get());
+    m_EditorScene = scene;
 }
 
 static void* __stdcall QtGLGetProcAddress(const char* name) {
@@ -818,16 +828,23 @@ void ViewportWidget::paintGL()
 // ============================================================
 void ViewportWidget::SetSceneState(SceneState state)
 {
+    HRN_CORE_INFO("ViewportWidget::SetSceneState -> {0}", (int)state);
     if (m_SceneState == state)
         return;
 
     m_SceneState = state;
 
     if (m_SceneState == SceneState::Play) {
+        HRN_CORE_INFO("Copying Editor Scene to Active Scene...");
         m_EditorScene = m_ActiveScene;
         m_ActiveScene = Heron::Scene::Copy(m_EditorScene);
+        HRN_CORE_INFO("Copy complete.");
+        
+        m_ScoreLabel->setText("Score: 0");
+        m_ScoreLabel->show();
     } else {
         m_ActiveScene = m_EditorScene;
+        m_ScoreLabel->hide();
     }
 
     emit SceneChanged(m_ActiveScene.get());
@@ -837,8 +854,11 @@ void ViewportWidget::SetSceneState(SceneState state)
 void ViewportWidget::updateGameLoop()
 {
     if (m_ActiveScene) {
-        if (m_SceneState == SceneState::Play)
+        if (m_SceneState == SceneState::Play) {
+            HRN_CORE_INFO("updateGameLoop -> OnUpdateRuntime START");
             m_ActiveScene->OnUpdateRuntime(0.016f);
+            HRN_CORE_INFO("updateGameLoop -> OnUpdateRuntime END");
+        }
         else
             m_ActiveScene->OnUpdateEditor(0.016f);
     }
@@ -857,11 +877,37 @@ void ViewportWidget::ShowContextMenu(const QPoint& pos)
     QAction* cylinderAction = menu.addAction("Add Cylinder");
 
     menu.addSeparator();
+    QAction* cameraAction = menu.addAction("Add Camera");
     QAction* emptyAction = menu.addAction("Add Empty Entity");
 
     connect(cubeAction, &QAction::triggered, this, &ViewportWidget::spawnCube);
     connect(planeAction, &QAction::triggered, this, &ViewportWidget::spawnPlane);
     connect(cylinderAction, &QAction::triggered, this, &ViewportWidget::spawnCylinder);
+    connect(cameraAction, &QAction::triggered, this, [this]() {
+        m_SpawnCounter++;
+        auto entity = m_ActiveScene->CreateEntity("Camera_" + std::to_string(m_SpawnCounter));
+        
+        // Add camera component
+        auto& cam = entity.AddComponent<Heron::CameraComponent>();
+        cam.Primary = true;
+        cam.FOV = 45.0f;
+        cam.NearClip = 0.1f;
+        cam.FarClip = 1000.0f;
+        
+        // Align to current editor viewport camera
+        auto& transform = entity.GetComponent<Heron::TransformComponent>();
+        glm::vec3 camPos = m_Camera.GetPosition();
+        transform.Translation[0] = camPos.x;
+        transform.Translation[1] = camPos.y;
+        transform.Translation[2] = camPos.z;
+        
+        // Set rotation from editor camera pitch/yaw
+        transform.Rotation[0] = -m_Camera.GetPitch();  // Pitch (X rotation)
+        transform.Rotation[1] = -m_Camera.GetYaw();    // Yaw (Y rotation)
+        transform.Rotation[2] = 0.0f;                   // No roll
+        
+        emit EntitySpawned();
+    });
     connect(emptyAction, &QAction::triggered, this, [this]() {
         m_SpawnCounter++;
         m_ActiveScene->CreateEntity("Empty_" + std::to_string(m_SpawnCounter));

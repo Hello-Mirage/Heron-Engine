@@ -118,7 +118,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(m_CameraNear, &QLineEdit::textEdited, this, &PropertiesPanel::OnCameraChanged);
     connect(m_CameraFar, &QLineEdit::textEdited, this, &PropertiesPanel::OnCameraChanged);
 
-    cameraLayout->addRow("Primary", m_CameraPrimary);
+    cameraLayout->addRow("Main Camera", m_CameraPrimary);
     cameraLayout->addRow("FOV", m_CameraFOV);
     cameraLayout->addRow("Near Clip", m_CameraNear);
     cameraLayout->addRow("Far Clip", m_CameraFar);

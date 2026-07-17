@@ -52,6 +52,7 @@ namespace Heron {
 		CopyComponent<BoxCollider3DComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<NativeScriptComponent>(dstRegistry, srcRegistry, enttMap);
 		CopyComponent<SkyboxComponent>(dstRegistry, srcRegistry, enttMap);
+		CopyComponent<CameraComponent>(dstRegistry, srcRegistry, enttMap);
 
 		// Reset runtime physics bodies in the new scene
 		auto rbView = dstRegistry.view<RigidBody3DComponent>();
@@ -88,16 +89,18 @@ namespace Heron {
 		}
 
 		// Clean up physics body
+		b3BodyId destroyedBody = b3_nullBodyId;
 		if (m_Registry.any_of<RigidBody3DComponent>((entt::entity)entity)) {
 			auto& rb = m_Registry.get<RigidBody3DComponent>((entt::entity)entity);
 			if (!B3_IS_NULL(rb.RuntimeBody)) {
 				b3DestroyBody(rb.RuntimeBody);
+				destroyedBody = rb.RuntimeBody;
 			}
 		}
 
 		if (m_Registry.any_of<BoxCollider3DComponent>((entt::entity)entity)) {
 			auto& bc = m_Registry.get<BoxCollider3DComponent>((entt::entity)entity);
-			if (!B3_IS_NULL(bc.RuntimeBody)) {
+			if (!B3_IS_NULL(bc.RuntimeBody) && !B3_ID_EQUALS(bc.RuntimeBody, destroyedBody)) {
 				b3DestroyBody(bc.RuntimeBody);
 			}
 		}
@@ -127,6 +130,7 @@ namespace Heron {
 				auto& nsc = scriptView.get<NativeScriptComponent>(e);
 
 				if (!nsc.Instance && !nsc.ScriptName.empty()) {
+					HRN_CORE_INFO("Instantiating script: {0}", nsc.ScriptName);
 					nsc.Instance = ScriptRegistry::Create(nsc.ScriptName);
 					if (nsc.Instance) {
 						nsc.Instance->m_Entity = Entity{ e, this };
@@ -134,13 +138,15 @@ namespace Heron {
 					}
 				}
 
-				if (nsc.Instance)
+				if (nsc.Instance) {
 					nsc.Instance->OnUpdate(deltaTime);
+				}
 			}
 		}
 
 		// === Physics Step ===
 		{
+			HRN_CORE_INFO("Physics Step START");
 			// Instantiate bodies if not created
 			auto view = m_Registry.view<RigidBody3DComponent, TransformComponent>();
 			for (auto e : view) {
@@ -164,6 +170,7 @@ namespace Heron {
 					}
 
 					rb.RuntimeBody = b3CreateBody(m_PhysicsWorld, &bodyDef);
+					HRN_CORE_INFO("Physics Step: Created Body ID (index1={0}, world0={1}, gen={2})", rb.RuntimeBody.index1, rb.RuntimeBody.world0, rb.RuntimeBody.generation);
 
 					// Initialize previous transform tracking
 					rb.PreviousTranslation[0] = transform.Translation[0];
@@ -252,8 +259,10 @@ namespace Heron {
 			}
 
 			// Step Simulation
+			HRN_CORE_INFO("b3World_Step START");
 			int subStepCount = 4;
 			b3World_Step(m_PhysicsWorld, deltaTime, subStepCount);
+			HRN_CORE_INFO("b3World_Step END");
 
 			// Retrieve transforms from Physics engine
 			for (auto e : view) {
@@ -288,6 +297,7 @@ namespace Heron {
 					rb.PreviousRotation[2] = transform.Rotation[2];
 				}
 			}
+			HRN_CORE_INFO("Physics Step END");
 		}
 	}
 

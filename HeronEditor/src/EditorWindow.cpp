@@ -283,6 +283,9 @@ void EditorWindow::OnOpenProject()
 
 void EditorWindow::OnNewScene()
 {
+    if (m_Viewport->GetSceneState() == ViewportWidget::SceneState::Play)
+        m_Viewport->SetSceneState(ViewportWidget::SceneState::Edit);
+        
     auto newScene = Heron::CreateRef<Heron::Scene>();
     m_Viewport->SetScene(newScene);
     m_HierarchyPanel->SetContext(newScene.get());
@@ -294,6 +297,9 @@ void EditorWindow::OnOpenScene()
 {
     QString filepath = QFileDialog::getOpenFileName(this, "Open Scene", QDir::currentPath(), "Heron Scene (*.heron)");
     if (!filepath.isEmpty()) {
+        if (m_Viewport->GetSceneState() == ViewportWidget::SceneState::Play)
+            m_Viewport->SetSceneState(ViewportWidget::SceneState::Edit);
+            
         OnNewScene(); // clear current scene
         Heron::SceneSerializer serializer(m_Viewport->GetSceneRef());
         serializer.Deserialize(filepath.toStdString());

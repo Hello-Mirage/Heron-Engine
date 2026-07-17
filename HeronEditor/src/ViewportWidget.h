@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <memory>
 
+class QLabel;
+
 class ViewportWidget : public QWidget
 {
     Q_OBJECT
@@ -116,6 +118,8 @@ private:
     // Skybox rendering
     Heron::Ref<Heron::Shader> m_SkyboxShader;
     Heron::Ref<Heron::VertexArray> m_SkyboxVAO;
+
+    QLabel* m_ScoreLabel = nullptr;
 
     int m_SpawnCounter = 0;
     bool m_Initialized = false;
