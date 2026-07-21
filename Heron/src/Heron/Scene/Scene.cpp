@@ -147,6 +147,11 @@ namespace Heron {
 		// === Physics Step ===
 		{
 			HRN_CORE_INFO("Physics Step START");
+			static bool s_printedSize = false;
+			if (!s_printedSize) {
+				HRN_CORE_INFO("Scene.cpp sizeof(RigidBody3DComponent) = {0}", sizeof(RigidBody3DComponent));
+				s_printedSize = true;
+			}
 			// Instantiate bodies if not created
 			auto view = m_Registry.view<RigidBody3DComponent, TransformComponent>();
 			for (auto e : view) {

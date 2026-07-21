@@ -62,6 +62,11 @@ public:
 
         // Use Physics if available for smooth movement
         if (HasComponent<Heron::RigidBody3DComponent>()) {
+            static bool s_printedSize = false;
+            if (!s_printedSize) {
+                HRN_CORE_INFO("main.cpp sizeof(RigidBody3DComponent) = {0}", sizeof(Heron::RigidBody3DComponent));
+                s_printedSize = true;
+            }
             HRN_CORE_INFO("PlayerController: Has RigidBody3DComponent");
             auto& rb = GetComponent<Heron::RigidBody3DComponent>();
             if (!B3_IS_NULL(rb.RuntimeBody)) {

@@ -7,7 +7,9 @@ project(Heron)
 set(BOX3D_SAMPLES OFF CACHE BOOL "" FORCE)
 set(BOX3D_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX3D_DOCS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS ON)
 add_subdirectory(vendor/box3d)
+set(BUILD_SHARED_LIBS OFF)
 
 # === GLM ===
 add_subdirectory(vendor/glm)
@@ -40,7 +42,8 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 add_library(Heron SHARED ${HERON_SOURCES} ${IMGUI_SOURCES})
 
 target_compile_definitions(Heron PUBLIC HRN_PLATFORM_WINDOWS GLAD_API_CALL_EXPORT)
-target_compile_definitions(Heron PRIVATE IMGUI_IMPL_OPENGL_LOADER_GLAD GLAD_API_CALL_EXPORT_BUILD)
+target_compile_definitions(Heron PRIVATE IMGUI_IMPL_OPENGL_LOADER_GLAD GLAD_API_CALL_EXPORT_BUILD ENTT_API_EXPORT)
+target_compile_definitions(Heron INTERFACE ENTT_API_IMPORT)
 target_compile_options(Heron PUBLIC /utf-8)
 
 target_include_directories(Heron
