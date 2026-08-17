@@ -10,6 +10,8 @@
 
 class QLabel;
 
+class TerrainEditorPanel;
+
 class ViewportWidget : public QOpenGLWidget
 {
     Q_OBJECT
@@ -17,6 +19,8 @@ class ViewportWidget : public QOpenGLWidget
 public:
     ViewportWidget(QWidget* parent = nullptr);
     ~ViewportWidget();
+
+    void SetTerrainEditorPanel(TerrainEditorPanel* panel) { m_TerrainEditorPanel = panel; }
 
     enum class SceneState { Edit, Play };
     void SetSceneState(SceneState state);
@@ -96,6 +100,7 @@ private:
     Heron::Ref<Heron::Scene> m_EditorScene;
     Heron::EditorCamera m_Camera;
     Heron::Entity m_SelectedEntity;
+    TerrainEditorPanel* m_TerrainEditorPanel = nullptr;
 
     // Vulkan Swapchain
     std::shared_ptr<Heron::VulkanSwapchain> m_VulkanSwapchain;

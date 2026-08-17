@@ -6,6 +6,7 @@
 #include "SceneHierarchyPanel.h"
 #include "PropertiesPanel.h"
 #include "ViewportWidget.h"
+#include "TerrainEditorPanel.h"
 
 class QFileSystemModel;
 class QTreeView;
@@ -38,6 +39,7 @@ private:
     void SetupDocking();
     void CreateHierarchyPanel();
     void CreatePropertiesPanel();
+    void CreateTerrainEditorPanel();
     void CreateFileExplorerPanel();
     void CreateMenuBar();
     void CreateToolBar();
@@ -49,6 +51,10 @@ private:
     QTabBar* m_ViewTabBar;
     SceneHierarchyPanel* m_HierarchyPanel;
     PropertiesPanel* m_PropertiesPanel;
+    
+    QDockWidget* m_TerrainEditorDock;
+    TerrainEditorPanel* m_TerrainEditorPanel;
+
     QToolBar* m_ToolBar;
 
     QAction* m_ActionMove;

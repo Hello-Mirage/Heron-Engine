@@ -17,6 +17,8 @@ add_executable(HeronEditor
     src/SceneHierarchyPanel.cpp
     src/PropertiesPanel.h
     src/PropertiesPanel.cpp
+    src/TerrainEditorPanel.h
+    src/TerrainEditorPanel.cpp
 )
 
 target_link_libraries(HeronEditor PRIVATE

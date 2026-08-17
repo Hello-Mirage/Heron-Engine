@@ -1,10 +1,14 @@
 #include <glad/gl.h>
 #include "ViewportWidget.h"
 #include <QPainter>
-#include <QMouseEvent>
-#include <QWheelEvent>
+#include <Heron/Scene/SceneSerializer.h>
+#include <windows.h>
 #include <QMenu>
 #include <QAction>
+#include <QCursor>
+#include "TerrainEditorPanel.h"
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QMessageBox>
 #include <QOpenGLContext>
 #include <QLabel>
@@ -1241,6 +1245,30 @@ void ViewportWidget::mousePressEvent(QMouseEvent* event)
             return; // Consume event
         }
     }
+
+    // Terrain Sculpting
+    if (event->button() == Qt::LeftButton && m_SelectedEntity && m_SelectedEntity.HasComponent<Heron::TerrainComponent>()) {
+        if (m_TerrainEditorPanel && m_TerrainEditorPanel->isVisible()) {
+            glm::vec3 rayOrigin, rayDir;
+            ScreenToWorldRay(event->position().x(), event->position().y(), rayOrigin, rayDir);
+            
+            auto& terrain = m_SelectedEntity.GetComponent<Heron::TerrainComponent>();
+            auto& transform = m_SelectedEntity.GetComponent<Heron::TransformComponent>();
+            
+            glm::vec3 hitPoint;
+            if (Heron::TerrainGenerator::Raycast(terrain, transform, rayOrigin, rayDir, hitPoint)) {
+                int brushType = (int)m_TerrainEditorPanel->GetActiveBrush();
+                float radius = m_TerrainEditorPanel->GetBrushSize();
+                float strength = m_TerrainEditorPanel->GetBrushStrength();
+                
+                Heron::TerrainGenerator::Sculpt(terrain, hitPoint, brushType, radius, strength);
+                Heron::TerrainGenerator::UpdateMesh(terrain);
+                emit PropertiesChanged();
+                update();
+                return; // Consume event
+            }
+        }
+    }
 }
 
 void ViewportWidget::mouseReleaseEvent(QMouseEvent* event)
@@ -1342,7 +1370,31 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event)
         return;
     }
 
+    // Terrain Sculpting Drag
     bool altHeld = (event->modifiers() & Qt::AltModifier);
+    if ((event->buttons() & Qt::LeftButton) && m_SelectedEntity && m_SelectedEntity.HasComponent<Heron::TerrainComponent>()) {
+        if (m_TerrainEditorPanel && m_TerrainEditorPanel->isVisible() && !m_GizmoDragging && !m_RightClickDragged && !altHeld) {
+            glm::vec3 rayOrigin, rayDir;
+            ScreenToWorldRay(currentPosition.x(), currentPosition.y(), rayOrigin, rayDir);
+            
+            auto& terrain = m_SelectedEntity.GetComponent<Heron::TerrainComponent>();
+            auto& transform = m_SelectedEntity.GetComponent<Heron::TransformComponent>();
+            
+            glm::vec3 hitPoint;
+            if (Heron::TerrainGenerator::Raycast(terrain, transform, rayOrigin, rayDir, hitPoint)) {
+                int brushType = (int)m_TerrainEditorPanel->GetActiveBrush();
+                float radius = m_TerrainEditorPanel->GetBrushSize();
+                float strength = m_TerrainEditorPanel->GetBrushStrength();
+                
+                Heron::TerrainGenerator::Sculpt(terrain, hitPoint, brushType, radius, strength);
+                Heron::TerrainGenerator::UpdateMesh(terrain);
+                emit PropertiesChanged();
+                update();
+                m_LastMousePosition = currentPosition;
+                return; // Consume event
+            }
+        }
+    }
 
     if (event->buttons() & Qt::MiddleButton) {
         m_Camera.MousePan(delta);

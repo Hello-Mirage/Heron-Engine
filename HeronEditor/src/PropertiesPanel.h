@@ -131,6 +131,7 @@ private:
     QLineEdit* m_TerrainSize;
     QLineEdit* m_TerrainHeightScale;
     QLineEdit* m_TerrainResolution;
+    QPushButton* m_OpenTerrainEditorBtn;
 
 private:
     // Audio members
@@ -142,6 +143,9 @@ private:
     QCheckBox*   m_AudioLoopCB;
     QWidget*     m_AudioTrackListWidget;
     QVBoxLayout* m_AudioTrackListLayout;
+
+signals:
+    void TerrainEditorRequested(Heron::Entity entity);
 };
 
 

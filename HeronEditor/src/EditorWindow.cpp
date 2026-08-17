@@ -71,6 +71,7 @@ void EditorWindow::SetupDocking()
     
     CreateHierarchyPanel();
     CreatePropertiesPanel();
+    CreateTerrainEditorPanel();
     CreateFileExplorerPanel();
 }
 
@@ -94,6 +95,27 @@ void EditorWindow::CreatePropertiesPanel()
 
     connect(m_Viewport, &ViewportWidget::PropertiesChanged,
             m_PropertiesPanel, &PropertiesPanel::UpdateValues);
+}
+
+void EditorWindow::CreateTerrainEditorPanel()
+{
+    m_TerrainEditorDock = new QDockWidget("Terrain Editor", this);
+    m_TerrainEditorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    
+    m_TerrainEditorPanel = new TerrainEditorPanel(m_TerrainEditorDock);
+    m_TerrainEditorDock->setWidget(m_TerrainEditorPanel);
+    
+    addDockWidget(Qt::RightDockWidgetArea, m_TerrainEditorDock);
+    m_TerrainEditorDock->hide(); // Hidden by default
+    
+    m_Viewport->SetTerrainEditorPanel(m_TerrainEditorPanel);
+
+    // Connect properties panel signal
+    connect(m_PropertiesPanel, &PropertiesPanel::TerrainEditorRequested, this, [this](Heron::Entity entity) {
+        m_TerrainEditorPanel->SetEntity(entity);
+        m_TerrainEditorDock->show();
+        m_TerrainEditorDock->raise();
+    });
 }
 
 void EditorWindow::CreateFileExplorerPanel()

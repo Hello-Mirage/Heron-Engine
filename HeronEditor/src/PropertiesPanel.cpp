@@ -261,6 +261,13 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     terrainLayout->addRow("Size (Width/Depth)", m_TerrainSize);
     terrainLayout->addRow("Height Scale", m_TerrainHeightScale);
     terrainLayout->addRow("Resolution", m_TerrainResolution);
+
+    m_OpenTerrainEditorBtn = new QPushButton("Open Terrain Editor");
+    connect(m_OpenTerrainEditorBtn, &QPushButton::clicked, this, [this]() {
+        if (m_SelectionContext) emit TerrainEditorRequested(m_SelectionContext);
+    });
+    terrainLayout->addRow("", m_OpenTerrainEditorBtn);
+
     m_MainLayout->addWidget(m_TerrainGroup);
 
     m_AddTerrainBtn = new QPushButton("Add Terrain");

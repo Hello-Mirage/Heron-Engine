@@ -168,10 +168,110 @@ namespace Heron {
         if (iy < 0) iy = 0;
         if (iy >= terrain.HeightmapHeight) iy = terrain.HeightmapHeight - 1;
 
-        unsigned char pixelValue = terrain.HeightmapData[iy * terrain.HeightmapWidth + ix];
-        float normalizedHeight = (float)pixelValue / 255.0f;
+        return terrain.RuntimeHeightData[iy * terrain.HeightmapWidth + ix];
+    }
+    
+    bool TerrainGenerator::Raycast(const Heron::TerrainComponent& terrain, const Heron::TransformComponent& transform, const glm::vec3& rayOrigin, const glm::vec3& rayDir, glm::vec3& outHitPoint)
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(transform.Translation[0], transform.Translation[1], transform.Translation[2]));
+        model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
+        model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
+        model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
+        model = glm::scale(model, glm::vec3(transform.Scale[0], transform.Scale[1], transform.Scale[2]));
 
-        return normalizedHeight * terrain.HeightScale;
+        glm::mat4 invModel = glm::inverse(model);
+        glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(rayOrigin, 1.0f));
+        glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDir, 0.0f)));
+
+        float t = 0.0f;
+        float step = terrain.Size / (float)terrain.Resolution;
+        if (step < 0.1f) step = 0.1f;
+        const float maxDist = 2000.0f;
+        
+        float tMin = 0.0f;
+        for (int i=0; i < 4000; i++) {
+            glm::vec3 pos = localOrigin + localDir * t;
+            
+            if (pos.x >= 0.0f && pos.x <= terrain.Size &&
+                pos.z >= 0.0f && pos.z <= terrain.Size) 
+            {
+                float ty = GetHeightAt(terrain, pos.x, pos.z);
+                if (pos.y <= ty) {
+                    float t0 = t - step;
+                    float t1 = t;
+                    for (int j=0; j<8; j++) {
+                        float tm = (t0 + t1) * 0.5f;
+                        glm::vec3 pm = localOrigin + localDir * tm;
+                        float tym = GetHeightAt(terrain, pm.x, pm.z);
+                        if (pm.y <= tym) t1 = tm;
+                        else t0 = tm;
+                    }
+                    outHitPoint = localOrigin + localDir * t1;
+                    return true;
+                }
+            }
+            t += step;
+            if (t > maxDist) break;
+        }
+        return false;
     }
 
+    void TerrainGenerator::Sculpt(Heron::TerrainComponent& terrain, const glm::vec3& localHitPoint, int brushType, float radius, float strength)
+    {
+        if (terrain.RuntimeHeightData.empty()) return;
+        
+        float cellSizeX = terrain.Size / (float)(terrain.HeightmapWidth - 1);
+        float cellSizeZ = terrain.Size / (float)(terrain.HeightmapHeight - 1);
+        
+        int hitX = (int)(localHitPoint.x / cellSizeX);
+        int hitZ = (int)(localHitPoint.z / cellSizeZ);
+        
+        int radiusCellsX = (int)(radius / cellSizeX) + 1;
+        int radiusCellsZ = (int)(radius / cellSizeZ) + 1;
+        
+        int minX = std::max(0, hitX - radiusCellsX);
+        int maxX = std::min(terrain.HeightmapWidth - 1, hitX + radiusCellsX);
+        int minZ = std::max(0, hitZ - radiusCellsZ);
+        int maxZ = std::min(terrain.HeightmapHeight - 1, hitZ + radiusCellsZ);
+        
+        float centerHeight = terrain.RuntimeHeightData[hitZ * terrain.HeightmapWidth + hitX];
+        
+        for (int z = minZ; z <= maxZ; z++) {
+            for (int x = minX; x <= maxX; x++) {
+                float dist = glm::length(glm::vec2((x - hitX) * cellSizeX, (z - hitZ) * cellSizeZ));
+                if (dist <= radius) {
+                    float falloff = 1.0f - (dist / radius);
+                    falloff = falloff * falloff;
+                    
+                    float effect = strength * falloff;
+                    int idx = z * terrain.HeightmapWidth + x;
+                    
+                    if (brushType == 0) {
+                        terrain.RuntimeHeightData[idx] += effect;
+                    } else if (brushType == 1) {
+                        terrain.RuntimeHeightData[idx] -= effect;
+                    } else if (brushType == 2) {
+                        terrain.RuntimeHeightData[idx] = glm::mix(terrain.RuntimeHeightData[idx], centerHeight, effect);
+                    } else if (brushType == 3) {
+                        float sum = 0;
+                        int count = 0;
+                        for (int sz = std::max(0, z-1); sz <= std::min(terrain.HeightmapHeight-1, z+1); sz++) {
+                            for (int sx = std::max(0, x-1); sx <= std::min(terrain.HeightmapWidth-1, x+1); sx++) {
+                                sum += terrain.RuntimeHeightData[sz * terrain.HeightmapWidth + sx];
+                                count++;
+                            }
+                        }
+                        float avg = sum / (float)count;
+                        terrain.RuntimeHeightData[idx] = glm::mix(terrain.RuntimeHeightData[idx], avg, effect);
+                    }
+                }
+            }
+        }
+    }
+
+    void TerrainGenerator::UpdateMesh(Heron::TerrainComponent& terrain)
+    {
+        terrain.Mesh = GenerateTerrain(terrain);
+    }
 }

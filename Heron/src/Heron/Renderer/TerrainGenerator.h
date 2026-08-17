@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Heron/Renderer/VertexArray.h"
+#include "Heron/Scene/Components.h"
+#include <glm/glm.hpp>
 #include <string>
 #include <memory>
 
@@ -8,14 +10,16 @@ namespace Heron {
 
     class TerrainGenerator {
     public:
-        // Generates a terrain mesh based on a heightmap.
-        // heightmapPath: path to a grayscale image (png, jpg, etc.)
-        // size: world size of the terrain (width and depth in units)
-        // heightScale: world height scaling multiplier for the heightmap values (0.0 to 1.0)
-        static Ref<VertexArray> GenerateTerrain(struct TerrainComponent& terrain);
-        
-        // Samples the height at a specific local coordinate
-        static float GetHeightAt(const struct TerrainComponent& terrain, float localX, float localZ);
+        // Terrain Mesh Generation
+        static Heron::Ref<Heron::VertexArray> GenerateTerrain(Heron::TerrainComponent& component);
+
+        // Editing Operations
+        static bool Raycast(const Heron::TerrainComponent& terrain, const Heron::TransformComponent& transform, const glm::vec3& rayOrigin, const glm::vec3& rayDir, glm::vec3& outHitPoint);
+        static void Sculpt(Heron::TerrainComponent& terrain, const glm::vec3& localHitPoint, int brushType, float radius, float strength);
+        static void UpdateMesh(Heron::TerrainComponent& terrain);
+
+        // Used by physics (legacy/math approach if needed)
+        static float GetHeightAt(const Heron::TerrainComponent& component, float localX, float localZ);
     };
 
 }
