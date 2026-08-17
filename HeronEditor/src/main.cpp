@@ -47,9 +47,10 @@ public:
                     
                     // Snap the camera to the "head" position so it pivots nicely without revolving
                     auto& camTransform = CameraEntity.GetComponent<Heron::TransformComponent>();
-                    camTransform.Translation[0] = 0.0f;
-                    camTransform.Translation[1] = EyeHeight;
-                    camTransform.Translation[2] = 0.0f;
+                    auto& myTransform = GetComponent<Heron::TransformComponent>();
+                    camTransform.Translation[0] = myTransform.Translation[0];
+                    camTransform.Translation[1] = myTransform.Translation[1] + EyeHeight;
+                    camTransform.Translation[2] = myTransform.Translation[2];
                     break;
                 }
             }
@@ -103,6 +104,11 @@ public:
             if (CameraEntity) {
                 auto& camTransform = CameraEntity.GetComponent<Heron::TransformComponent>();
                 camTransform.Rotation[0] = m_Pitch;
+                
+                // Track the player's position (plus EyeHeight offset) since transforms are global
+                camTransform.Translation[0] = transform.Translation[0];
+                camTransform.Translation[1] = transform.Translation[1] + EyeHeight;
+                camTransform.Translation[2] = transform.Translation[2];
             }
         }
         
