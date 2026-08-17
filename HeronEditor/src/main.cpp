@@ -26,6 +26,7 @@ public:
     float SprintSpeed = 16.0f;
     float LookSensitivity = 1.0f;
     float JumpForce = 5.0f;
+    float EyeHeight = 0.8f; // Height of the camera relative to the player center
     
     Heron::Entity CameraEntity;
     
@@ -43,6 +44,12 @@ public:
                 if (child.HasComponent<Heron::CameraComponent>()) {
                     CameraEntity = child;
                     HRN_CORE_INFO("FirstPersonController: Found child camera!");
+                    
+                    // Snap the camera to the "head" position so it pivots nicely without revolving
+                    auto& camTransform = CameraEntity.GetComponent<Heron::TransformComponent>();
+                    camTransform.Translation[0] = 0.0f;
+                    camTransform.Translation[1] = EyeHeight;
+                    camTransform.Translation[2] = 0.0f;
                     break;
                 }
             }
