@@ -28,4 +28,14 @@ target_link_libraries(HeronEditor PRIVATE
 )
 
 target_compile_options(HeronEditor PRIVATE /Zc:__cplusplus /utf-8)
-target_include_directories(HeronEditor PRIVATE ../Heron/vendor/glad/include)
+target_include_directories(HeronEditor PRIVATE 
+    ../Heron/vendor/glad/include
+    ../Heron/vendor/tinyobjloader
+)
+
+add_custom_command(TARGET HeronEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:Heron>
+    $<TARGET_FILE_DIR:HeronEditor>
+)
+

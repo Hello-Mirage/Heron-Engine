@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
 
 namespace Heron {
 
@@ -11,10 +12,18 @@ namespace Heron {
 		Entity(entt::entity handle, Scene* scene);
 		Entity(const Entity& other) = default;
 
+		glm::mat4 GetWorldTransform();
+
 		template<typename T, typename... Args>
 		T& AddComponent(Args&&... args) {
 			HRN_CORE_ASSERT(!HasComponent<T>(), "Entity already has component!");
 			T& component = m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
+			return component;
+		}
+
+		template<typename T, typename... Args>
+		T& AddOrReplaceComponent(Args&&... args) {
+			T& component = m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
 			return component;
 		}
 

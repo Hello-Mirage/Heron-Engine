@@ -7,6 +7,7 @@
 #include <QFileDialog>
 #include <Heron/Renderer/Texture.h>
 #include <QScrollArea>
+#include <QIntValidator>
 
 PropertiesPanel::PropertiesPanel(QWidget* parent)
     : QDockWidget("Properties", parent)
@@ -127,16 +128,25 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     // --- Mesh Group ---
     m_MeshGroup = new QGroupBox("Mesh Material");
     QFormLayout* meshLayout = new QFormLayout(m_MeshGroup);
+    m_MeshTypeCombo = new QComboBox();
+    m_MeshTypeCombo->addItems({"Cube", "Plane", "Cylinder", "Sphere", "Custom"});
     m_MeshColorBtn = new QPushButton("Pick Color");
     m_MeshTextureBtn = new QPushButton("Select Texture...");
     m_MeshTextureLabel = new QLabel("None");
+    m_MeshModelBtn = new QPushButton("Select Model (.obj)...");
+    m_MeshModelLabel = new QLabel("None");
 
+    connect(m_MeshTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PropertiesPanel::OnMeshTypeChanged);
     connect(m_MeshColorBtn, &QPushButton::clicked, this, &PropertiesPanel::OnMeshColorClicked);
     connect(m_MeshTextureBtn, &QPushButton::clicked, this, &PropertiesPanel::OnMeshTextureClicked);
+    connect(m_MeshModelBtn, &QPushButton::clicked, this, &PropertiesPanel::OnMeshModelClicked);
 
+    meshLayout->addRow("Type", m_MeshTypeCombo);
+    meshLayout->addRow("Model File", m_MeshModelBtn);
+    meshLayout->addRow("Current Model:", m_MeshModelLabel);
     meshLayout->addRow("Color", m_MeshColorBtn);
     meshLayout->addRow("Texture", m_MeshTextureBtn);
-    meshLayout->addRow("Current:", m_MeshTextureLabel);
+    meshLayout->addRow("Current Tex:", m_MeshTextureLabel);
     m_MainLayout->addWidget(m_MeshGroup);
 
     // --- Add Camera Button ---
@@ -190,9 +200,77 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(m_AddSkyboxBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddSkyboxComponent);
     m_MainLayout->addWidget(m_AddSkyboxBtn);
 
+    // --- Audio Group ---
+    m_AudioGroup = new QGroupBox("Audio Player");
+    QVBoxLayout* audioGroupLayout = new QVBoxLayout(m_AudioGroup);
+
+    // Checkboxes row
+    QHBoxLayout* audioCtrlRow = new QHBoxLayout();
+    m_AudioPlayCB   = new QCheckBox("Play");
+    m_AudioShuffleCB= new QCheckBox("Shuffle");
+    m_AudioLoopCB   = new QCheckBox("Loop");
+    audioCtrlRow->addWidget(m_AudioPlayCB);
+    audioCtrlRow->addWidget(m_AudioShuffleCB);
+    audioCtrlRow->addWidget(m_AudioLoopCB);
+    audioGroupLayout->addLayout(audioCtrlRow);
+
+    connect(m_AudioPlayCB,    &QCheckBox::stateChanged, this, &PropertiesPanel::OnAudioPlayChanged);
+    connect(m_AudioShuffleCB, &QCheckBox::stateChanged, this, &PropertiesPanel::OnAudioShuffleChanged);
+    connect(m_AudioLoopCB,    &QCheckBox::stateChanged, this, &PropertiesPanel::OnAudioLoopChanged);
+
+    // Track list container (dynamically rebuilt)
+    m_AudioTrackListWidget = new QWidget();
+    m_AudioTrackListLayout = new QVBoxLayout(m_AudioTrackListWidget);
+    m_AudioTrackListLayout->setContentsMargins(0, 0, 0, 0);
+    m_AudioTrackListLayout->setSpacing(2);
+    audioGroupLayout->addWidget(m_AudioTrackListWidget);
+
+    // Add Track button
+    m_AudioAddTrackBtn = new QPushButton("+ Add Track");
+    connect(m_AudioAddTrackBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAudioAddTrack);
+    audioGroupLayout->addWidget(m_AudioAddTrackBtn);
+
+    m_MainLayout->addWidget(m_AudioGroup);
+
+    m_AddAudioBtn = new QPushButton("Add Audio Player");
+    connect(m_AddAudioBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddAudioComponent);
+    m_MainLayout->addWidget(m_AddAudioBtn);
+
+    // --- Terrain Group ---
+    m_TerrainGroup = new QGroupBox("Terrain");
+    QFormLayout* terrainLayout = new QFormLayout(m_TerrainGroup);
+    m_TerrainHeightmapBtn = new QPushButton("Select Heightmap...");
+    m_TerrainHeightmapLabel = new QLabel("None");
+    m_TerrainTextureBtn = new QPushButton("Select Texture...");
+    m_TerrainTextureLabel = new QLabel("None");
+    
+    m_TerrainSize = new QLineEdit(); m_TerrainSize->setValidator(validator);
+    m_TerrainHeightScale = new QLineEdit(); m_TerrainHeightScale->setValidator(validator);
+    m_TerrainResolution = new QLineEdit(); m_TerrainResolution->setValidator(new QIntValidator(this));
+
+    connect(m_TerrainHeightmapBtn, &QPushButton::clicked, this, &PropertiesPanel::OnTerrainHeightmapClicked);
+    connect(m_TerrainTextureBtn, &QPushButton::clicked, this, &PropertiesPanel::OnTerrainTextureClicked);
+    connect(m_TerrainSize, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
+    connect(m_TerrainHeightScale, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
+    connect(m_TerrainResolution, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
+
+    terrainLayout->addRow("Heightmap", m_TerrainHeightmapBtn);
+    terrainLayout->addRow("Current Map:", m_TerrainHeightmapLabel);
+    terrainLayout->addRow("Texture", m_TerrainTextureBtn);
+    terrainLayout->addRow("Current Tex:", m_TerrainTextureLabel);
+    terrainLayout->addRow("Size (Width/Depth)", m_TerrainSize);
+    terrainLayout->addRow("Height Scale", m_TerrainHeightScale);
+    terrainLayout->addRow("Resolution", m_TerrainResolution);
+    m_MainLayout->addWidget(m_TerrainGroup);
+
+    m_AddTerrainBtn = new QPushButton("Add Terrain");
+    connect(m_AddTerrainBtn, &QPushButton::clicked, this, &PropertiesPanel::OnAddTerrainComponent);
+    m_MainLayout->addWidget(m_AddTerrainBtn);
+
     scrollArea->setWidget(m_Container);
     setWidget(scrollArea);
 }
+
 
 void PropertiesPanel::SetEntity(Heron::Entity entity)
 {
@@ -244,8 +322,13 @@ void PropertiesPanel::DrawComponents()
         m_MeshGroup->hide();
         m_LightGroup->hide();
         m_AddLightBtn->hide();
+        m_AudioGroup->hide();
+        m_AddAudioBtn->hide();
+        m_TerrainGroup->hide();
+        m_AddTerrainBtn->hide();
         return;
     }
+
 
     if (m_SelectionContext.HasComponent<Heron::TagComponent>()) {
         auto& tag = m_SelectionContext.GetComponent<Heron::TagComponent>().Tag;
@@ -353,6 +436,28 @@ void PropertiesPanel::DrawComponents()
     if (m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
         auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
         
+        m_MeshTypeCombo->blockSignals(true);
+        if (mesh.Type == Heron::PrimitiveType::Cube) m_MeshTypeCombo->setCurrentIndex(0);
+        else if (mesh.Type == Heron::PrimitiveType::Plane) m_MeshTypeCombo->setCurrentIndex(1);
+        else if (mesh.Type == Heron::PrimitiveType::Cylinder) m_MeshTypeCombo->setCurrentIndex(2);
+        else if (mesh.Type == Heron::PrimitiveType::Sphere) m_MeshTypeCombo->setCurrentIndex(3);
+        else if (mesh.Type == Heron::PrimitiveType::Custom) m_MeshTypeCombo->setCurrentIndex(4);
+        m_MeshTypeCombo->blockSignals(false);
+
+        if (mesh.Type == Heron::PrimitiveType::Custom) {
+            m_MeshModelBtn->show();
+            m_MeshModelLabel->show();
+            if (mesh.ModelPath.empty()) {
+                m_MeshModelLabel->setText("None");
+            } else {
+                QFileInfo fi(QString::fromStdString(mesh.ModelPath));
+                m_MeshModelLabel->setText(fi.fileName());
+            }
+        } else {
+            m_MeshModelBtn->hide();
+            m_MeshModelLabel->hide();
+        }
+
         QColor c((int)(mesh.Color[0]*255), (int)(mesh.Color[1]*255), (int)(mesh.Color[2]*255), (int)(mesh.Color[3]*255));
         QString style = QString("background-color: %1;").arg(c.name());
         m_MeshColorBtn->setStyleSheet(style);
@@ -389,16 +494,30 @@ void PropertiesPanel::DrawComponents()
     }
 
     if (m_SelectionContext.HasComponent<Heron::SkyboxComponent>()) {
+        HRN_CORE_INFO("DrawComponents: Has SkyboxComponent");
         auto& sc = m_SelectionContext.GetComponent<Heron::SkyboxComponent>();
         
         auto setBtnText = [](QPushButton* btn, const std::string& path, const char* defaultText) {
-            if (path.empty()) btn->setText(defaultText);
-            else {
-                QFileInfo fi(QString::fromStdString(path));
-                btn->setText(fi.fileName());
+            HRN_CORE_INFO("setBtnText start: path={0}", path);
+            if (!btn) {
+                HRN_CORE_ERROR("btn is null!");
+                return;
             }
+            if (path.empty()) {
+                HRN_CORE_INFO("path empty, setting default text");
+                btn->setText(defaultText);
+            } else {
+                HRN_CORE_INFO("path not empty, creating QFileInfo");
+                QFileInfo fi(QString::fromStdString(path));
+                HRN_CORE_INFO("getting fileName");
+                QString fileName = fi.fileName();
+                HRN_CORE_INFO("setting text");
+                btn->setText(fileName);
+            }
+            HRN_CORE_INFO("setBtnText done");
         };
 
+        HRN_CORE_INFO("DrawComponents: Setting button texts");
         setBtnText(m_SkyboxBtnRight, sc.TexturePaths[0], "Select Right...");
         setBtnText(m_SkyboxBtnLeft, sc.TexturePaths[1], "Select Left...");
         setBtnText(m_SkyboxBtnTop, sc.TexturePaths[2], "Select Top...");
@@ -412,7 +531,98 @@ void PropertiesPanel::DrawComponents()
         m_SkyboxGroup->hide();
         m_AddSkyboxBtn->show();
     }
+
+    // --- Audio Component ---
+    if (m_SelectionContext.HasComponent<Heron::AudioComponent>()) {
+        auto& ac = m_SelectionContext.GetComponent<Heron::AudioComponent>();
+
+        m_AudioPlayCB->blockSignals(true);
+        m_AudioShuffleCB->blockSignals(true);
+        m_AudioLoopCB->blockSignals(true);
+        m_AudioPlayCB->setChecked(ac.Play);
+        m_AudioShuffleCB->setChecked(ac.Shuffle);
+        m_AudioLoopCB->setChecked(ac.Loop);
+        m_AudioPlayCB->blockSignals(false);
+        m_AudioShuffleCB->blockSignals(false);
+        m_AudioLoopCB->blockSignals(false);
+
+        // Rebuild the dynamic track list
+        QLayoutItem* child;
+        while ((child = m_AudioTrackListLayout->takeAt(0)) != nullptr) {
+            if (child->widget()) child->widget()->deleteLater();
+            delete child;
+        }
+        for (int i = 0; i < (int)ac.AudioPaths.size(); i++) {
+            QWidget* row = new QWidget();
+            QHBoxLayout* rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(0, 0, 0, 0);
+
+            QFileInfo fi(QString::fromStdString(ac.AudioPaths[i]));
+            QLabel* label = new QLabel(fi.fileName().isEmpty() ? QString::fromStdString(ac.AudioPaths[i]) : fi.fileName());
+            label->setToolTip(QString::fromStdString(ac.AudioPaths[i]));
+
+            QPushButton* removeBtn = new QPushButton("X");
+            removeBtn->setFixedWidth(24);
+            int idx = i;
+            connect(removeBtn, &QPushButton::clicked, this, [this, idx]() { OnAudioRemoveTrack(idx); });
+
+            rowLayout->addWidget(label, 1);
+            rowLayout->addWidget(removeBtn);
+            m_AudioTrackListLayout->addWidget(row);
+        }
+
+        // Show currently playing track if any
+        if (ac.CurrentTrackIndex >= 0 && ac.CurrentTrackIndex < (int)ac.AudioPaths.size()) {
+            QFileInfo fi(QString::fromStdString(ac.AudioPaths[ac.CurrentTrackIndex]));
+            m_AudioGroup->setTitle(QString("Audio Player ▶ %1").arg(fi.fileName()));
+        } else {
+            m_AudioGroup->setTitle("Audio Player");
+        }
+
+        m_AudioGroup->show();
+        m_AddAudioBtn->hide();
+    } else {
+        m_AudioGroup->hide();
+        m_AddAudioBtn->show();
+    }
+    // --- Terrain Component ---
+    if (m_SelectionContext.HasComponent<Heron::TerrainComponent>()) {
+        auto& terrain = m_SelectionContext.GetComponent<Heron::TerrainComponent>();
+        
+        m_TerrainSize->blockSignals(true);
+        m_TerrainHeightScale->blockSignals(true);
+        m_TerrainResolution->blockSignals(true);
+        
+        m_TerrainSize->setText(QString::number(terrain.Size));
+        m_TerrainHeightScale->setText(QString::number(terrain.HeightScale));
+        m_TerrainResolution->setText(QString::number(terrain.Resolution));
+        
+        m_TerrainSize->blockSignals(false);
+        m_TerrainHeightScale->blockSignals(false);
+        m_TerrainResolution->blockSignals(false);
+
+        if (terrain.HeightmapPath.empty()) {
+            m_TerrainHeightmapLabel->setText("None");
+        } else {
+            QFileInfo fi(QString::fromStdString(terrain.HeightmapPath));
+            m_TerrainHeightmapLabel->setText(fi.fileName());
+        }
+
+        if (terrain.TexturePath.empty()) {
+            m_TerrainTextureLabel->setText("None");
+        } else {
+            QFileInfo fi(QString::fromStdString(terrain.TexturePath));
+            m_TerrainTextureLabel->setText(fi.fileName());
+        }
+
+        m_TerrainGroup->show();
+        m_AddTerrainBtn->hide();
+    } else {
+        m_TerrainGroup->hide();
+        m_AddTerrainBtn->show();
+    }
 }
+
 
 void PropertiesPanel::OnTagChanged(const QString& text)
 {
@@ -545,6 +755,31 @@ void PropertiesPanel::OnMeshTextureClicked()
     }
 }
 
+void PropertiesPanel::OnMeshTypeChanged(int index)
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
+        auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
+        if (index == 0) mesh.Type = Heron::PrimitiveType::Cube;
+        else if (index == 1) mesh.Type = Heron::PrimitiveType::Plane;
+        else if (index == 2) mesh.Type = Heron::PrimitiveType::Cylinder;
+        else if (index == 3) mesh.Type = Heron::PrimitiveType::Sphere;
+        else if (index == 4) mesh.Type = Heron::PrimitiveType::Custom;
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnMeshModelClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::MeshComponent>()) {
+        QString fileName = QFileDialog::getOpenFileName(this, "Select Model", "", "OBJ Files (*.obj)");
+        if (!fileName.isEmpty()) {
+            auto& mesh = m_SelectionContext.GetComponent<Heron::MeshComponent>();
+            mesh.ModelPath = fileName.toStdString();
+            DrawComponents();
+        }
+    }
+}
+
 void PropertiesPanel::OnAddLightComponent()
 {
     if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::LightComponent>()) {
@@ -579,8 +814,21 @@ void PropertiesPanel::OnLightIntensityChanged()
 
 void PropertiesPanel::OnAddSkyboxComponent()
 {
+    HRN_CORE_INFO("PropertiesPanel::OnAddSkyboxComponent triggered");
     if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::SkyboxComponent>()) {
-        m_SelectionContext.AddComponent<Heron::SkyboxComponent>();
+        HRN_CORE_INFO("Adding SkyboxComponent");
+        auto& sc = m_SelectionContext.AddComponent<Heron::SkyboxComponent>();
+        
+        // Set default skybox images using absolute paths to avoid working directory issues
+        sc.TexturePaths[0] = "D:/Heron-Engine/Skyboxdefault/r.png";
+        sc.TexturePaths[1] = "D:/Heron-Engine/Skyboxdefault/L.png";
+        sc.TexturePaths[2] = "D:/Heron-Engine/Skyboxdefault/t.png";
+        sc.TexturePaths[3] = "D:/Heron-Engine/Skyboxdefault/bottom.png";
+        sc.TexturePaths[4] = "D:/Heron-Engine/Skyboxdefault/f.png";
+        sc.TexturePaths[5] = "D:/Heron-Engine/Skyboxdefault/b.png";
+        sc.Texture = nullptr;
+        
+        HRN_CORE_INFO("Calling DrawComponents from OnAddSkyboxComponent");
         DrawComponents();
     }
 }
@@ -592,19 +840,130 @@ void PropertiesPanel::OnSkyboxTextureClicked(int faceIndex)
         if (!fileName.isEmpty()) {
             auto& sc = m_SelectionContext.GetComponent<Heron::SkyboxComponent>();
             sc.TexturePaths[faceIndex] = fileName.toStdString();
+            sc.Texture = nullptr;
             
-            // Try to load cubemap if all faces are present
-            bool hasAll = true;
-            for (int i=0; i<6; i++) {
-                if (sc.TexturePaths[i].empty()) hasAll = false;
-            }
-            if (hasAll) {
-                std::vector<std::string> paths;
-                for (int i=0; i<6; i++) paths.push_back(sc.TexturePaths[i]);
-                sc.Texture = Heron::TextureCube::Create(paths);
-            }
+            // The actual OpenGL texture creation is handled in ViewportWidget
+            // to ensure the OpenGL context is current.
             
             DrawComponents();
         }
     }
 }
+
+// ===================== Audio Slots =====================
+
+void PropertiesPanel::OnAddAudioComponent()
+{
+    if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::AudioComponent>()) {
+        m_SelectionContext.AddComponent<Heron::AudioComponent>();
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnAudioAddTrack()
+{
+    if (!m_SelectionContext || !m_SelectionContext.HasComponent<Heron::AudioComponent>()) return;
+
+    QString fileName = QFileDialog::getOpenFileName(
+        this, "Select Audio Track", "",
+        "Audio Files (*.mp3 *.wav *.flac *.ogg *.opus *.aiff)");
+    if (!fileName.isEmpty()) {
+        auto& ac = m_SelectionContext.GetComponent<Heron::AudioComponent>();
+        ac.AudioPaths.push_back(fileName.toStdString());
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnAudioRemoveTrack(int index)
+{
+    if (!m_SelectionContext || !m_SelectionContext.HasComponent<Heron::AudioComponent>()) return;
+    auto& ac = m_SelectionContext.GetComponent<Heron::AudioComponent>();
+    if (index >= 0 && index < (int)ac.AudioPaths.size()) {
+        ac.AudioPaths.erase(ac.AudioPaths.begin() + index);
+        if (ac.CurrentTrackIndex >= (int)ac.AudioPaths.size())
+            ac.CurrentTrackIndex = -1;
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnAudioPlayChanged(int state)
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::AudioComponent>()) {
+        m_SelectionContext.GetComponent<Heron::AudioComponent>().Play = (state == Qt::Checked);
+    }
+}
+
+void PropertiesPanel::OnAudioShuffleChanged(int state)
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::AudioComponent>()) {
+        m_SelectionContext.GetComponent<Heron::AudioComponent>().Shuffle = (state == Qt::Checked);
+    }
+}
+
+void PropertiesPanel::OnAudioLoopChanged(int state)
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::AudioComponent>()) {
+        m_SelectionContext.GetComponent<Heron::AudioComponent>().Loop = (state == Qt::Checked);
+    }
+}
+
+// ===================== Terrain Slots =====================
+
+void PropertiesPanel::OnAddTerrainComponent()
+{
+    if (m_SelectionContext && !m_SelectionContext.HasComponent<Heron::TerrainComponent>()) {
+        m_SelectionContext.AddComponent<Heron::TerrainComponent>();
+        DrawComponents();
+    }
+}
+
+void PropertiesPanel::OnTerrainHeightmapClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::TerrainComponent>()) {
+        QString fileName = QFileDialog::getOpenFileName(this, "Select Heightmap Image", "", "Images (*.png *.jpg *.jpeg *.bmp)");
+        if (!fileName.isEmpty()) {
+            auto& terrain = m_SelectionContext.GetComponent<Heron::TerrainComponent>();
+            terrain.HeightmapPath = fileName.toStdString();
+            terrain.Mesh = nullptr; // Invalidate mesh so it regenerates
+            DrawComponents();
+        }
+    }
+}
+
+void PropertiesPanel::OnTerrainTextureClicked()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::TerrainComponent>()) {
+        QString fileName = QFileDialog::getOpenFileName(this, "Select Terrain Texture", "", "Images (*.png *.jpg *.jpeg *.bmp)");
+        if (!fileName.isEmpty()) {
+            auto& terrain = m_SelectionContext.GetComponent<Heron::TerrainComponent>();
+            terrain.TexturePath = fileName.toStdString();
+            terrain.Texture = nullptr; // Invalidate texture so it reloads
+            DrawComponents();
+        }
+    }
+}
+
+void PropertiesPanel::OnTerrainValuesChanged()
+{
+    if (m_SelectionContext && m_SelectionContext.HasComponent<Heron::TerrainComponent>()) {
+        auto& terrain = m_SelectionContext.GetComponent<Heron::TerrainComponent>();
+        float oldSize = terrain.Size;
+        float oldHeight = terrain.HeightScale;
+        int oldRes = terrain.Resolution;
+        
+        terrain.Size = m_TerrainSize->text().toFloat();
+        terrain.HeightScale = m_TerrainHeightScale->text().toFloat();
+        terrain.Resolution = m_TerrainResolution->text().toInt();
+        
+        // Ensure valid constraints
+        if (terrain.Size < 1.0f) terrain.Size = 1.0f;
+        if (terrain.Resolution < 2) terrain.Resolution = 2;
+        if (terrain.Resolution > 1000) terrain.Resolution = 1000;
+        
+        // Only invalidate mesh if shape parameters changed
+        if (oldSize != terrain.Size || oldHeight != terrain.HeightScale || oldRes != terrain.Resolution) {
+            terrain.Mesh = nullptr;
+        }
+    }
+}
+

@@ -20,7 +20,16 @@ namespace Heron {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, nullptr);
+		std::vector<uint32_t> data(width * height, 0xffffffff);
+		glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data.data());
+	}
+
+	void OpenGLTexture2D::SetData(void* data, uint32_t size)
+	{
+		uint32_t bpp = m_DataFormat == GL_RGBA ? 4 : 3;
+		HRN_CORE_ASSERT(size == m_Width * m_Height * bpp, "Data must be entire texture!");
+		glBindTexture(GL_TEXTURE_2D, m_RendererID);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
 	}
 
 	OpenGLTexture2D::OpenGLTexture2D(const std::string& path)
@@ -29,7 +38,10 @@ namespace Heron {
 		int width, height, channels;
 		stbi_set_flip_vertically_on_load(1);
 		stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, 0);
-		HRN_CORE_ASSERT(data, "Failed to load image!");
+		if (!data) {
+			HRN_CORE_ERROR("Failed to load image at path: {0}", path);
+			return;
+		}
 		
 		m_Width = width;
 		m_Height = height;
@@ -83,31 +95,33 @@ namespace Heron {
 		int width, height, channels;
 		stbi_set_flip_vertically_on_load(0); // Cubemaps usually don't need vertical flip
 		
+		int expectedWidth = 0, expectedHeight = 0;
 		for (unsigned int i = 0; i < 6; i++)
 		{
-			stbi_uc* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 0);
+			stbi_uc* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 4); // Force 4 channels
 			if (data)
 			{
-				GLenum internalFormat = 0, dataFormat = 0;
-				if (channels == 4) {
-					internalFormat = GL_RGBA8;
-					dataFormat = GL_RGBA;
-				} else if (channels == 3) {
-					internalFormat = GL_RGB8;
-					dataFormat = GL_RGB;
+				if (i == 0) {
+					expectedWidth = width;
+					expectedHeight = height;
+					m_Width = width;
+					m_Height = height;
+				} else if (width != expectedWidth || height != expectedHeight) {
+					HRN_CORE_ERROR("Cubemap face {0} has size {1}x{2}, but expected {3}x{4}! This will crash OpenGL.", i, width, height, expectedWidth, expectedHeight);
+					stbi_image_free(data);
+					continue;
 				}
+
+				GLenum internalFormat = GL_RGBA8;
+				GLenum dataFormat = GL_RGBA;
 
 				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
 							 0, internalFormat, width, height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
 				stbi_image_free(data);
-				
-				m_Width = width;
-				m_Height = height;
 			}
 			else
 			{
-				HRN_CORE_ASSERT(false, "Failed to load cubemap texture at path: {0}", paths[i]);
-				stbi_image_free(data);
+				HRN_CORE_ERROR("Failed to load cubemap texture at path: {0}", paths[i]);
 			}
 		}
 

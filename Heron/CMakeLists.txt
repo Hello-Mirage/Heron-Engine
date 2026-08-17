@@ -55,8 +55,10 @@ target_include_directories(Heron
         vendor/imgui
         vendor/glad/include
         vendor/stb_image
+        vendor/miniaudio
         ${VULKAN_INCLUDE_DIR}
 )
+
 
 # === GLFW ===
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -65,7 +67,8 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/glfw)
 
 target_link_libraries(Heron PUBLIC box3d glfw glm::glm yaml-cpp ${VULKAN_LIB})
-target_link_libraries(Heron PUBLIC opengl32 gdi32 user32 shell32)
+target_link_libraries(Heron PUBLIC opengl32 gdi32 user32 shell32 winmm ole32)
+
 
 # Precompiled Header
 target_precompile_headers(Heron PRIVATE src/hrnpch.h)

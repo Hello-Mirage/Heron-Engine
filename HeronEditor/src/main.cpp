@@ -9,12 +9,142 @@ extern QLabel* g_ScoreLabel;
 #include <Heron/Scene/Components.h>
 #include <Heron/Scripting/ScriptableEntity.h>
 #include <Heron/Scripting/ScriptRegistry.h>
+#include <Heron/Audio/AudioSystem.h>
 #include <random>
 #include <vector>
-
-// ============================================================
+#include <Heron/Renderer/TerrainGenerator.h>// ============================================================
 //  BUILT-IN SCRIPTS — Available in the Editor's Script dropdown
 // ============================================================
+
+#include <Heron/Core/MouseCodes.h>
+#include <glm/glm.hpp>
+
+class FirstPersonController : public Heron::ScriptableEntity
+{
+public:
+    float WalkSpeed = 8.0f;
+    float SprintSpeed = 16.0f;
+    float LookSensitivity = 1.0f;
+    float JumpForce = 5.0f;
+    
+    Heron::Entity CameraEntity;
+    
+    float m_Yaw = 0.0f;
+    float m_Pitch = 0.0f;
+    bool m_IsLocked = false;
+
+    void OnCreate() override {
+        HRN_CORE_INFO("FirstPersonController: Initializing...");
+        // Find child camera
+        if (HasComponent<Heron::RelationshipComponent>()) {
+            auto& rc = GetComponent<Heron::RelationshipComponent>();
+            for (auto childId : rc.Children) {
+                Heron::Entity child = { childId, GetScene() };
+                if (child.HasComponent<Heron::CameraComponent>()) {
+                    CameraEntity = child;
+                    HRN_CORE_INFO("FirstPersonController: Found child camera!");
+                    break;
+                }
+            }
+        }
+        
+        if (!CameraEntity) {
+            HRN_CORE_WARN("FirstPersonController needs a Camera component on a child entity!");
+        }
+    }
+
+    void OnUpdate(float dt) override {
+        // Toggle Lock
+        if (Heron::Input::IsMouseButtonPressed(Heron::Mouse::ButtonLeft)) {
+            if (!m_IsLocked && Heron::Input::IsViewportHovered()) {
+                Heron::Input::SetCursorMode(Heron::CursorMode::Locked);
+                m_IsLocked = true;
+                Heron::Input::SetMousePosition(500.0f, 500.0f);
+            }
+        }
+        if (Heron::Input::IsKeyPressed(Heron::Key::Escape)) {
+            if (m_IsLocked) {
+                Heron::Input::SetCursorMode(Heron::CursorMode::Normal);
+                m_IsLocked = false;
+            }
+        }
+
+        // 1. Mouse Look
+        if (m_IsLocked) {
+            float mouseX = Heron::Input::GetMouseX();
+            float mouseY = Heron::Input::GetMouseY();
+            
+            float xOffset = mouseX - 500.0f;
+            float yOffset = 500.0f - mouseY; 
+            
+            Heron::Input::SetMousePosition(500.0f, 500.0f);
+            
+            xOffset *= LookSensitivity * dt * 0.2f;
+            yOffset *= LookSensitivity * dt * 0.2f;
+            
+            m_Yaw -= xOffset;
+            m_Pitch += yOffset;
+            
+            if (m_Pitch > 1.5f) m_Pitch = 1.5f; 
+            if (m_Pitch < -1.5f) m_Pitch = -1.5f;
+            
+            // Apply Yaw to player
+            auto& transform = GetComponent<Heron::TransformComponent>();
+            transform.Rotation[1] = m_Yaw;
+            
+            // Apply Pitch to camera
+            if (CameraEntity) {
+                auto& camTransform = CameraEntity.GetComponent<Heron::TransformComponent>();
+                camTransform.Rotation[0] = m_Pitch;
+            }
+        }
+        
+        // 2. Keyboard Movement
+        auto& transform = GetComponent<Heron::TransformComponent>();
+        float speed = Heron::Input::IsKeyPressed(Heron::Key::LeftShift) ? SprintSpeed : WalkSpeed;
+        
+        glm::vec3 forward(sin(m_Yaw), 0.0f, cos(m_Yaw));
+        glm::vec3 right(cos(m_Yaw), 0.0f, -sin(m_Yaw));
+        
+        glm::vec3 velocity(0.0f);
+        
+        if (Heron::Input::IsKeyPressed(Heron::Key::W)) velocity -= forward;
+        if (Heron::Input::IsKeyPressed(Heron::Key::S)) velocity += forward;
+        if (Heron::Input::IsKeyPressed(Heron::Key::A)) velocity -= right;
+        if (Heron::Input::IsKeyPressed(Heron::Key::D)) velocity += right;
+        
+        if (glm::length(velocity) > 0.0f) {
+            velocity = glm::normalize(velocity) * speed;
+        }
+        
+        // 3. Apply Movement
+        if (HasComponent<Heron::RigidBody3DComponent>()) {
+            auto& rb = GetComponent<Heron::RigidBody3DComponent>();
+            if (!B3_IS_NULL(rb.RuntimeBody)) {
+                b3Vec3 currentVel = b3Body_GetLinearVelocity(rb.RuntimeBody);
+                
+                b3Vec3 targetVel;
+                targetVel.x = velocity.x;
+                targetVel.y = currentVel.y;
+                targetVel.z = velocity.z;
+                
+                if (Heron::Input::IsKeyPressed(Heron::Key::Space) && currentVel.y < 0.1f && currentVel.y > -0.1f) {
+                    targetVel.y = JumpForce;
+                }
+                
+                b3Body_SetLinearVelocity(rb.RuntimeBody, targetVel);
+                
+                b3Quat rot = b3MakeQuatFromAxisAngle({0, 1, 0}, m_Yaw);
+                b3Pos pos = b3Body_GetPosition(rb.RuntimeBody);
+                b3Body_SetTransform(rb.RuntimeBody, pos, rot);
+            }
+        } else {
+            transform.Translation[0] += velocity.x * dt;
+            transform.Translation[2] += velocity.z * dt;
+        }
+    }
+};
+HERON_REGISTER_SCRIPT(FirstPersonController);
 
 class PlayerController : public Heron::ScriptableEntity
 {
@@ -41,8 +171,6 @@ public:
             return;
         }
 
-        Score += ForwardSpeed * dt * 0.1f; // Increase score based on distance
-        
         if (g_ScoreLabel) {
             g_ScoreLabel->setText(QString("Score: %1").arg((int)Score));
         }
@@ -146,13 +274,9 @@ public:
     }
 
     void OnUpdate(float dt) override {
-        HRN_CORE_INFO("CameraFollow::OnUpdate START");
         if (!Player) {
             Player = FindEntityByName("Player");
-            if (!Player) {
-                HRN_CORE_INFO("CameraFollow::OnUpdate END (No Player)");
-                return;
-            }
+            if (!Player) return;
         }
 
         auto& myTransform = GetComponent<Heron::TransformComponent>();
@@ -163,13 +287,12 @@ public:
         float targetY = playerTransform.Translation[1] + OffsetY;
         float targetZ = playerTransform.Translation[2] + OffsetZ;
         
-        myTransform.Translation[0] += (targetX - myTransform.Translation[0]) * 5.0f * dt;
-        myTransform.Translation[1] += (targetY - myTransform.Translation[1]) * 10.0f * dt;
-        myTransform.Translation[2] += (targetZ - myTransform.Translation[2]) * 15.0f * dt;
+        myTransform.Translation[0] += (targetX - myTransform.Translation[0]) * 15.0f * dt;
+        myTransform.Translation[1] += (targetY - myTransform.Translation[1]) * 15.0f * dt;
+        myTransform.Translation[2] += (targetZ - myTransform.Translation[2]) * 20.0f * dt;
 
         // Slight downward tilt
         myTransform.Rotation[0] = -0.26f; // ~15 degrees down
-        HRN_CORE_INFO("CameraFollow::OnUpdate END");
     }
 };
 HERON_REGISTER_SCRIPT(CameraFollow);
@@ -182,11 +305,13 @@ public:
     float DespawnDistanceBehind = 10.0f;
     float SpawnIntervalZ = 15.0f;
     float LastSpawnZ = 0.0f;
-    float LastLineSpawnZ = 0.0f;
-    float LineSpawnIntervalZ = 10.0f;
 
-    std::vector<Heron::Entity> ActiveObstacles;
-    std::vector<Heron::Entity> ActiveLines;
+    struct ObstacleData {
+        Heron::Entity entity;
+        bool hasPassedPlayer;
+    };
+    std::vector<ObstacleData> ActiveObstacles;
+    std::vector<Heron::Entity> ActiveDebris;
     
     std::mt19937 rng;
     std::uniform_real_distribution<float> laneDist;
@@ -198,32 +323,28 @@ public:
     }
 
     void OnUpdate(float dt) override {
-        HRN_CORE_INFO("ObstacleSpawner::OnUpdate START");
         if (!Player) {
             Player = FindEntityByName("Player");
-            if (!Player) {
-                HRN_CORE_INFO("ObstacleSpawner::OnUpdate END (No Player)");
-                return;
-            }
+            if (!Player) return;
         }
 
         auto& playerTransform = Player.GetComponent<Heron::TransformComponent>();
         float currentZ = playerTransform.Translation[2];
         
-        // If player reset to start, clear obstacles and lines
+        // If player reset to start, clear obstacles
         if (currentZ > -5.0f && LastSpawnZ < -20.0f) {
             for (auto obs : ActiveObstacles) {
-                if (obs) Destroy(obs);
+                if (obs.entity) Destroy(obs.entity);
             }
             ActiveObstacles.clear();
-            
-            for (auto line : ActiveLines) {
-                if (line) Destroy(line);
+
+            for (auto debris : ActiveDebris) {
+                if (debris) Destroy(debris);
             }
-            ActiveLines.clear();
-            
+            ActiveDebris.clear();
+
             LastSpawnZ = 0.0f;
-            LastLineSpawnZ = 0.0f;
+
             SpawnIntervalZ = 15.0f;
         }
 
@@ -232,23 +353,57 @@ public:
             SpawnObstacle(currentZ - SpawnDistanceAhead);
             LastSpawnZ = currentZ;
             
-            // Speed up spawning to increase difficulty
             SpawnIntervalZ -= 0.1f * dt;
             if (SpawnIntervalZ < 4.0f) SpawnIntervalZ = 4.0f;
-        }
-        
-        // Spawn road lines
-        if (currentZ < LastLineSpawnZ - LineSpawnIntervalZ) {
-            SpawnRoadLine(currentZ - SpawnDistanceAhead);
-            LastLineSpawnZ = currentZ;
+            
+            std::uniform_real_distribution<float> jitterDist(-1.5f, 1.5f);
+            LastSpawnZ += jitterDist(rng);
         }
 
-        // Cleanup passed obstacles
+        float pX = playerTransform.Translation[0];
+        float pZ = playerTransform.Translation[2];
+        float pY = playerTransform.Translation[1];
+        float pHalf = 0.5f;
+        float oHalf = 0.5f;
+
+        // Cleanup passed obstacles & check collision
         for (auto it = ActiveObstacles.begin(); it != ActiveObstacles.end(); ) {
-            if (*it) {
-                auto& obsTransform = it->GetComponent<Heron::TransformComponent>();
+            if (it->entity) {
+                auto& obsTransform = it->entity.GetComponent<Heron::TransformComponent>();
+                
+                float oX = obsTransform.Translation[0];
+                float oZ = obsTransform.Translation[2];
+                float oY = obsTransform.Translation[1];
+                
+                // AABB Collision (smash the block)
+                if (std::abs(pX - oX) < (pHalf + oHalf) && std::abs(pZ - oZ) < (pHalf + oHalf) && std::abs(pY - oY) < (pHalf + oHalf)) {
+                    if (Player.HasComponent<Heron::NativeScriptComponent>()) {
+                        auto* nsc = &Player.GetComponent<Heron::NativeScriptComponent>();
+                        if (nsc->Instance) {
+                            PlayerController* pc = (PlayerController*)nsc->Instance;
+                            pc->Score += 1.0f; // Scored a point!
+                        }
+                    }
+                    SpawnDebris(oX, oY, oZ);
+                    Destroy(it->entity);
+                    it = ActiveObstacles.erase(it);
+                    continue;
+                }
+                
+                // Passed player without collision
+                if (!it->hasPassedPlayer && obsTransform.Translation[2] > currentZ + oHalf) {
+                    it->hasPassedPlayer = true;
+                    if (Player.HasComponent<Heron::NativeScriptComponent>()) {
+                        auto* nsc = &Player.GetComponent<Heron::NativeScriptComponent>();
+                        if (nsc->Instance) {
+                            PlayerController* pc = (PlayerController*)nsc->Instance;
+                            pc->Score -= 1.0f; // Penalize for missing
+                        }
+                    }
+                }
+                
                 if (obsTransform.Translation[2] > currentZ + DespawnDistanceBehind) {
-                    Destroy(*it);
+                    Destroy(it->entity);
                     it = ActiveObstacles.erase(it);
                 } else {
                     ++it;
@@ -257,25 +412,50 @@ public:
                 it = ActiveObstacles.erase(it);
             }
         }
-        
-        // Cleanup passed road lines
-        for (auto it = ActiveLines.begin(); it != ActiveLines.end(); ) {
+
+        // Cleanup Debris
+        for (auto it = ActiveDebris.begin(); it != ActiveDebris.end(); ) {
             if (*it) {
-                auto& lineTransform = it->GetComponent<Heron::TransformComponent>();
-                if (lineTransform.Translation[2] > currentZ + DespawnDistanceBehind) {
+                auto& debrisTransform = it->GetComponent<Heron::TransformComponent>();
+                // Despawn if it falls below kill plane (-10 Y) or falls too far behind player
+                if (debrisTransform.Translation[1] < -10.0f || debrisTransform.Translation[2] > currentZ + DespawnDistanceBehind) {
                     Destroy(*it);
-                    it = ActiveLines.erase(it);
+                    it = ActiveDebris.erase(it);
                 } else {
                     ++it;
                 }
             } else {
-                it = ActiveLines.erase(it);
+                it = ActiveDebris.erase(it);
             }
         }
-        HRN_CORE_INFO("ObstacleSpawner::OnUpdate END");
+    }
+
+    void SpawnDebris(float oX, float oY, float oZ) {
+
+        for (int i = 0; i < 5; i++) {
+            Heron::Entity debris = Instantiate("Debris");
+            auto& transform = debris.GetComponent<Heron::TransformComponent>();
+            transform.Translation[0] = oX + (laneDist(rng) * 0.1f);
+            transform.Translation[1] = oY + (laneDist(rng) * 0.1f);
+            transform.Translation[2] = oZ + (laneDist(rng) * 0.1f);
+            transform.Scale[0] = 0.2f;
+            transform.Scale[1] = 0.2f;
+            transform.Scale[2] = 0.2f;
+
+            auto& mesh = debris.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Cube);
+            mesh.Color[0] = 0.8f; mesh.Color[1] = 0.2f; mesh.Color[2] = 0.2f; mesh.Color[3] = 1.0f;
+            
+            auto& rb = debris.AddComponent<Heron::RigidBody3DComponent>();
+            rb.Type = b3_dynamicBody; // Allows physics to scatter it
+            auto& bc = debris.AddComponent<Heron::BoxCollider3DComponent>();
+            bc.HalfSize[0] = 0.1f; bc.HalfSize[1] = 0.1f; bc.HalfSize[2] = 0.1f;
+            
+            ActiveDebris.push_back(debris);
+        }
     }
 
     void SpawnObstacle(float spawnZ) {
+
         Heron::Entity obstacle = Instantiate("Obstacle");
         auto& transform = obstacle.GetComponent<Heron::TransformComponent>();
 
@@ -286,48 +466,24 @@ public:
         auto& mesh = obstacle.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Cube);
         mesh.Color[0] = 0.8f; mesh.Color[1] = 0.2f; mesh.Color[2] = 0.2f; mesh.Color[3] = 1.0f;
         
-        // Add Physics!
-        auto& rb = obstacle.AddComponent<Heron::RigidBody3DComponent>();
-        rb.Type = b3_staticBody; // Doesn't move
-        auto& bc = obstacle.AddComponent<Heron::BoxCollider3DComponent>();
-        bc.HalfSize[0] = 0.5f; bc.HalfSize[1] = 0.5f; bc.HalfSize[2] = 0.5f;
-
-        ActiveObstacles.push_back(obstacle);
-    }
-    
-    void SpawnRoadLine(float spawnZ) {
-        Heron::Entity line = Instantiate("RoadLine");
-        auto& transform = line.GetComponent<Heron::TransformComponent>();
-
-        transform.Translation[0] = 0.0f;
-        transform.Translation[1] = -0.49f; // Just above the ground floor
-        transform.Translation[2] = spawnZ;
-        
-        // Long, flat, narrow rectangle
-        transform.Scale[0] = 0.2f;
-        transform.Scale[1] = 0.02f;
-        transform.Scale[2] = 4.0f;
-
-        auto& mesh = line.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Cube);
-        mesh.Color[0] = 1.0f; mesh.Color[1] = 1.0f; mesh.Color[2] = 1.0f; mesh.Color[3] = 1.0f;
-
-        // No Physics! Just visual
-        ActiveLines.push_back(line);
+        // NO physics components so the player can pass through and "cut" it
+        ActiveObstacles.push_back({ obstacle, false });
     }
 
     void OnDestroy() override {
         for (auto obs : ActiveObstacles) {
-            if (obs) Destroy(obs);
+            if (obs.entity) Destroy(obs.entity);
         }
         ActiveObstacles.clear();
-        
-        for (auto line : ActiveLines) {
-            if (line) Destroy(line);
+
+        for (auto debris : ActiveDebris) {
+            if (debris) Destroy(debris);
         }
-        ActiveLines.clear();
+        ActiveDebris.clear();
     }
 };
 HERON_REGISTER_SCRIPT(ObstacleSpawner);
+
 
 class RotateScript : public Heron::ScriptableEntity
 {
@@ -361,7 +517,10 @@ int main(int argc, char *argv[])
     darkPalette.setColor(QPalette::BrightText, Qt::red);
     darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
     darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    Heron::AudioSystem::Init();
     EditorWindow w;
     w.show();
-    return a.exec();
+    int ret = a.exec();
+    Heron::AudioSystem::Shutdown();
+    return ret;
 }

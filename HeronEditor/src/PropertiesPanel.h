@@ -35,6 +35,8 @@ private slots:
     void OnCameraChanged();
     void OnMeshColorClicked();
     void OnMeshTextureClicked();
+    void OnMeshTypeChanged(int index);
+    void OnMeshModelClicked();
     void OnAddLightComponent();
     void OnLightColorClicked();
     void OnLightIntensityChanged();
@@ -70,9 +72,12 @@ private:
 
     // Mesh
     QGroupBox* m_MeshGroup;
+    QComboBox* m_MeshTypeCombo;
     QPushButton* m_MeshColorBtn;
     QPushButton* m_MeshTextureBtn;
     QLabel* m_MeshTextureLabel;
+    QPushButton* m_MeshModelBtn;
+    QLabel* m_MeshModelLabel;
 
     QPushButton* m_AddRigidBodyBtn;
     QPushButton* m_AddBoxColliderBtn;
@@ -99,8 +104,44 @@ private:
     QPushButton* m_SkyboxBtnFront;
     QPushButton* m_SkyboxBtnBack;
 
+
 private slots:
     void OnAddSkyboxComponent();
     void OnSkyboxTextureClicked(int faceIndex);
+    void OnAddAudioComponent();
+    void OnAudioAddTrack();
+    void OnAudioRemoveTrack(int index);
+    void OnAudioPlayChanged(int state);
+    void OnAudioShuffleChanged(int state);
+    void OnAudioLoopChanged(int state);
 
+    void OnAddTerrainComponent();
+    void OnTerrainHeightmapClicked();
+    void OnTerrainTextureClicked();
+    void OnTerrainValuesChanged();
+
+private:
+    // Terrain members
+    QGroupBox* m_TerrainGroup;
+    QPushButton* m_AddTerrainBtn;
+    QPushButton* m_TerrainHeightmapBtn;
+    QLabel* m_TerrainHeightmapLabel;
+    QPushButton* m_TerrainTextureBtn;
+    QLabel* m_TerrainTextureLabel;
+    QLineEdit* m_TerrainSize;
+    QLineEdit* m_TerrainHeightScale;
+    QLineEdit* m_TerrainResolution;
+
+private:
+    // Audio members
+    QGroupBox*   m_AudioGroup;
+    QPushButton* m_AddAudioBtn;
+    QPushButton* m_AudioAddTrackBtn;
+    QCheckBox*   m_AudioPlayCB;
+    QCheckBox*   m_AudioShuffleCB;
+    QCheckBox*   m_AudioLoopCB;
+    QWidget*     m_AudioTrackListWidget;
+    QVBoxLayout* m_AudioTrackListLayout;
 };
+
+

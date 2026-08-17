@@ -8,15 +8,24 @@
 #include <QMessageBox>
 #include <QOpenGLContext>
 #include <QLabel>
+#include <QEnterEvent>
 
 #include <windows.h>
 #include <vulkan/vulkan_win32.h>
 #include <Heron/Platform/Vulkan/VulkanContext.h>
 #include <Heron/Platform/Vulkan/VulkanShader.h>
 #include <Heron/Core/Log.h>
+#include <Heron/Core/Input.h>
 #include <Heron/Renderer/EditorCamera.h>
 #include <Heron/Renderer/Texture.h>
+#include <Heron/Audio/AudioSystem.h>
 #include <cmath>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
+#include <Heron/Renderer/TerrainGenerator.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -25,19 +34,15 @@
 QLabel* g_ScoreLabel = nullptr;
 
 ViewportWidget::ViewportWidget(QWidget* parent)
-    : QWidget(parent)
+    : QOpenGLWidget(parent)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
-    setAttribute(Qt::WA_OpaquePaintEvent);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NativeWindow);
-    setAttribute(Qt::WA_NoSystemBackground);
 
     m_ActiveScene = Heron::CreateRef<Heron::Scene>();
 
     m_ScoreLabel = new QLabel("Score: 0", this);
-    m_ScoreLabel->setStyleSheet("QLabel { color: white; font-size: 24px; font-weight: bold; background-color: rgba(0, 0, 0, 150); padding: 10px; border-radius: 5px; }");
+    m_ScoreLabel->setStyleSheet("QLabel { color: white; font-size: 24px; font-weight: bold; background-color: rgba(0, 0, 0, 150); padding: 10px; border-radius: 5px; min-width: 150px; }");
     m_ScoreLabel->move(20, 20);
     m_ScoreLabel->hide();
     g_ScoreLabel = m_ScoreLabel;
@@ -57,11 +62,21 @@ void ViewportWidget::SetScene(Heron::Ref<Heron::Scene> scene)
     m_EditorScene = scene;
 }
 
+static HMODULE s_OpenGL32Module = nullptr;
 static void* __stdcall QtGLGetProcAddress(const char* name) {
+    void* p = nullptr;
     if (QOpenGLContext::currentContext()) {
-        return (void*)QOpenGLContext::currentContext()->getProcAddress(name);
+        p = (void*)QOpenGLContext::currentContext()->getProcAddress(name);
     }
-    return nullptr;
+    if (!p) {
+        if (!s_OpenGL32Module) {
+            s_OpenGL32Module = LoadLibraryA("opengl32.dll");
+        }
+        if (s_OpenGL32Module) {
+            p = (void*)GetProcAddress(s_OpenGL32Module, name);
+        }
+    }
+    return p;
 }
 
 // ============================================================
@@ -100,7 +115,7 @@ void ViewportWidget::CreateMeshShader()
         uniform vec4 u_Color;
         uniform sampler2D u_Texture;
         
-        uniform vec3 u_LightPos;
+        uniform vec3 u_LightDir;
         uniform vec3 u_LightColor;
         uniform float u_LightIntensity;
         uniform bool u_HasLight;
@@ -112,24 +127,18 @@ void ViewportWidget::CreateMeshShader()
             vec3 lighting = vec3(1.0); // Default to full bright if no lights
 
             if (u_HasLight) {
-                // Ambient
-                float ambientStrength = 0.1;
+                float ambientStrength = 0.15;
                 vec3 ambient = ambientStrength * u_LightColor;
 
-                // Diffuse
-                vec3 lightDir = normalize(u_LightPos - v_WorldPos);
-                float diff = max(dot(normal, lightDir), 0.0);
-                vec3 diffuse = diff * u_LightColor;
+                vec3 lightDirection = normalize(-u_LightDir);
+                float diff = max(dot(normal, lightDirection), 0.0);
+                vec3 diffuse = diff * u_LightColor * u_LightIntensity;
                 
-                // Attenuation
-                float distance = length(u_LightPos - v_WorldPos);
-                float attenuation = 1.0 / (1.0 + 0.09 * distance + 0.032 * (distance * distance));
-                
-                lighting = (ambient + diffuse) * attenuation * u_LightIntensity;
+                lighting = ambient + diffuse;
             } else {
                 // Fallback directional lighting if no point light exists
-                vec3 lightDir = normalize(vec3(0.4, 0.8, 0.3));
-                float diff = max(dot(normal, lightDir), 0.0);
+                vec3 lightDirection = normalize(vec3(0.4, 0.8, 0.3));
+                float diff = max(dot(normal, lightDirection), 0.0);
                 float ambient = 0.25;
                 lighting = vec3(ambient + diff * 0.75);
             }
@@ -336,14 +345,98 @@ void ViewportWidget::GeneratePrimitiveMeshes()
     }
 }
 
+Heron::Ref<Heron::VertexArray> ViewportWidget::LoadCustomMesh(const std::string& path)
+{
+    if (path.empty()) return nullptr;
+
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.mtl_search_path = "./";
+    tinyobj::ObjReader reader;
+
+    if (!reader.ParseFromFile(path, reader_config)) {
+        if (!reader.Error().empty()) {
+            HRN_CORE_ERROR("TinyObjReader: {0}", reader.Error());
+        }
+        return nullptr;
+    }
+
+    if (!reader.Warning().empty()) {
+        HRN_CORE_WARN("TinyObjReader: {0}", reader.Warning());
+    }
+
+    auto& attrib = reader.GetAttrib();
+    auto& shapes = reader.GetShapes();
+
+    std::vector<float> vertices;
+    std::vector<uint32_t> indices;
+
+    uint32_t indexOffset = 0;
+    for (size_t s = 0; s < shapes.size(); s++) {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
+
+            for (size_t v = 0; v < fv; v++) {
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+
+                tinyobj::real_t vx = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
+                tinyobj::real_t vy = attrib.vertices[3 * size_t(idx.vertex_index) + 1];
+                tinyobj::real_t vz = attrib.vertices[3 * size_t(idx.vertex_index) + 2];
+                vertices.push_back(vx);
+                vertices.push_back(vy);
+                vertices.push_back(vz);
+
+                if (idx.normal_index >= 0) {
+                    tinyobj::real_t nx = attrib.normals[3 * size_t(idx.normal_index) + 0];
+                    tinyobj::real_t ny = attrib.normals[3 * size_t(idx.normal_index) + 1];
+                    tinyobj::real_t nz = attrib.normals[3 * size_t(idx.normal_index) + 2];
+                    vertices.push_back(nx);
+                    vertices.push_back(ny);
+                    vertices.push_back(nz);
+                } else {
+                    vertices.push_back(0.0f);
+                    vertices.push_back(1.0f);
+                    vertices.push_back(0.0f);
+                }
+
+                if (idx.texcoord_index >= 0) {
+                    tinyobj::real_t tx = attrib.texcoords[2 * size_t(idx.texcoord_index) + 0];
+                    tinyobj::real_t ty = attrib.texcoords[2 * size_t(idx.texcoord_index) + 1];
+                    vertices.push_back(tx);
+                    vertices.push_back(ty);
+                } else {
+                    vertices.push_back(0.0f);
+                    vertices.push_back(0.0f);
+                }
+
+                indices.push_back(indexOffset++);
+            }
+            index_offset += fv;
+        }
+    }
+
+    auto vao = Heron::VertexArray::Create();
+    auto vbo = Heron::VertexBuffer::Create(vertices.data(), (uint32_t)(vertices.size() * sizeof(float)));
+    vbo->SetLayout({
+        { Heron::ShaderDataType::Float3, "a_Position" },
+        { Heron::ShaderDataType::Float3, "a_Normal" },
+        { Heron::ShaderDataType::Float2, "a_TexCoord" }
+    });
+    vao->AddVertexBuffer(vbo);
+    
+    auto ibo = Heron::IndexBuffer::Create(indices.data(), (uint32_t)indices.size());
+    vao->SetIndexBuffer(ibo);
+
+    return vao;
+}
+
 // ============================================================
 //  INIT GL
 // ============================================================
 void ViewportWidget::initializeGL()
 {
-    Heron::RenderCommand::Init();
-
 	if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+        Heron::RenderCommand::Init();
 		// Initialize Vulkan surface using HWND
 		HWND hwnd = (HWND)this->winId();
 		VkWin32SurfaceCreateInfoKHR createInfo{};
@@ -361,15 +454,23 @@ void ViewportWidget::initializeGL()
 		if (!status) {
 			HRN_CORE_ERROR("Failed to initialize GLAD inside QOpenGLWidget!");
 		} else {
-			HRN_CORE_INFO("GLAD initialized in Qt Viewport.");
+			HRN_CORE_INFO("GLAD initialized in Qt Viewport. Version: {0}.{1}", GLAD_VERSION_MAJOR(status), GLAD_VERSION_MINOR(status));
 		}
+		
+        HRN_CORE_INFO("initializeGL: Calling RenderCommand::Init()...");
+        Heron::RenderCommand::Init();
+        HRN_CORE_INFO("initializeGL: RenderCommand::Init() done.");
 	}
 
+    HRN_CORE_INFO("initializeGL: Creating WhiteTexture...");
     uint32_t whiteTextureData = 0xffffffff;
     m_WhiteTexture = Heron::Texture2D::Create(1, 1);
+    m_WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
     m_WhiteTexture->Bind();
+    HRN_CORE_INFO("initializeGL: WhiteTexture created and bound.");
 
     // ===== Grid Setup =====
+    HRN_CORE_INFO("initializeGL: Setting up Grid VAO...");
     m_GridVAO = Heron::VertexArray::Create();
     float quadVerts[4 * 3] = {
         -1.0f, -1.0f, 0.0f,
@@ -385,7 +486,28 @@ void ViewportWidget::initializeGL()
     m_GridVAO->SetIndexBuffer(ibo);
 
     // ===== Gizmo Setup =====
-    m_GizmoShader = Heron::Shader::Create("assets/shaders/Gizmo.vert.spv", "assets/shaders/Gizmo.frag.spv");
+    if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+        m_GizmoShader = Heron::Shader::Create("assets/shaders/Gizmo.vert.spv", "assets/shaders/Gizmo.frag.spv");
+    } else {
+        std::string gizmoVert = R"(
+            #version 330 core
+            layout(location = 0) in vec3 a_Position;
+            uniform mat4 u_ViewProjection;
+            uniform mat4 u_Model;
+            void main() {
+                gl_Position = u_ViewProjection * u_Model * vec4(a_Position, 1.0);
+            }
+        )";
+        std::string gizmoFrag = R"(
+            #version 330 core
+            uniform vec4 u_Color;
+            layout(location = 0) out vec4 FragColor;
+            void main() {
+                FragColor = u_Color;
+            }
+        )";
+        m_GizmoShader = Heron::Shader::Create(gizmoVert, gizmoFrag);
+    }
 
     m_GizmoLineVAO = Heron::VertexArray::Create();
     float lineVerts[] = { 0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f };
@@ -534,25 +656,38 @@ void ViewportWidget::RenderEntities()
 
     glm::mat4 viewProj = m_Camera.GetViewProjection();
 
-    if (m_SceneState == SceneState::Play) {
+    if (m_ViewMode == ViewMode::Game) {
         auto cameraView = m_ActiveScene->GetRegistry().view<Heron::TransformComponent, Heron::CameraComponent>();
         for (auto entity : cameraView) {
             auto [transform, camera] = cameraView.get<Heron::TransformComponent, Heron::CameraComponent>(entity);
             if (camera.Primary) {
                 float aspect = (float)width() / (float)height();
+
                 glm::mat4 projection = glm::perspective(glm::radians(camera.FOV), aspect, camera.NearClip, camera.FarClip);
                 if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
                     projection[2][2] = projection[2][2] * 0.5f + projection[2][3] * 0.5f;
                     projection[3][2] = projection[3][2] * 0.5f + projection[3][3] * 0.5f;
                 }
 
-                glm::mat4 model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(transform.Translation[0], transform.Translation[1], transform.Translation[2]));
-                model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
-                model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
-                model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
+                Heron::Entity camEntity = { entity, m_ActiveScene.get() };
+                glm::mat4 model = camEntity.GetWorldTransform();
                 
-                glm::mat4 view = glm::inverse(model);
+                // Extract only Translation and Rotation to avoid scale distortion in View matrix
+                glm::vec3 scale;
+                glm::quat rotation;
+                glm::vec3 translation;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(model, scale, rotation, translation, skew, perspective);
+                
+                glm::mat4 cleanModel = glm::translate(glm::mat4(1.0f), translation) * glm::mat4_cast(rotation);
+                glm::mat4 view = glm::inverse(cleanModel);
+                
+                static int s_LogCounter = 0;
+                if (s_LogCounter++ % 60 == 0) {
+                    HRN_CORE_INFO("Game Camera World Pos: {0}, {1}, {2}", translation.x, translation.y, translation.z);
+                }
+                
                 viewProj = projection * view;
                 break;
             }
@@ -622,27 +757,32 @@ void ViewportWidget::RenderEntities()
         auto& transform = view.get<Heron::TransformComponent>(entity);
         auto& mesh = view.get<Heron::MeshComponent>(entity);
 
-        // Build model matrix from transform
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(
-            transform.Translation[0],
-            transform.Translation[1],
-            transform.Translation[2]
-        ));
-        model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
-        model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
-        model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
-        model = glm::scale(model, glm::vec3(transform.Scale[0], transform.Scale[1], transform.Scale[2]));
+        Heron::Entity e{ entity, m_ActiveScene.get() };
+        glm::mat4 model = e.GetWorldTransform();
 
         m_MeshShader->SetMat4("u_Model", model);
         m_MeshShader->SetFloat4("u_Color", glm::vec4(
             mesh.Color[0], mesh.Color[1], mesh.Color[2], mesh.Color[3]
         ));
         
+        Heron::Ref<Heron::VertexArray> vaoToBind;
+        if (mesh.Type == Heron::PrimitiveType::Custom && !mesh.ModelPath.empty()) {
+            if (m_CustomMeshes.find(mesh.ModelPath) == m_CustomMeshes.end()) {
+                m_CustomMeshes[mesh.ModelPath] = LoadCustomMesh(mesh.ModelPath);
+            }
+            vaoToBind = m_CustomMeshes[mesh.ModelPath];
+        } else {
+            auto it = m_PrimitiveMeshes.find((int)mesh.Type);
+            if (it != m_PrimitiveMeshes.end()) vaoToBind = it->second;
+        }
+        
+        // Fallback to cube if custom failed to load
+        if (!vaoToBind) vaoToBind = m_PrimitiveMeshes[(int)Heron::PrimitiveType::Cube];
+
         if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
             auto pass = m_VulkanSwapchain->GetRenderPass();
             auto vkShader = std::static_pointer_cast<Heron::VulkanShader>(m_MeshShader);
-            vkShader->BuildPipeline(pass, m_PrimitiveMeshes[(int)mesh.Type]->GetVertexBuffers()[0]->GetLayout(), true, false);
+            vkShader->BuildPipeline(pass, vaoToBind->GetVertexBuffers()[0]->GetLayout(), true, false);
         }
 
         if (mesh.Texture) {
@@ -652,90 +792,17 @@ void ViewportWidget::RenderEntities()
         }
         m_MeshShader->SetInt("u_Texture", 0);
 
-        auto it = m_PrimitiveMeshes.find((int)mesh.Type);
-        if (it != m_PrimitiveMeshes.end()) {
-            it->second->Bind();
+        if (vaoToBind) {
+            vaoToBind->Bind();
             if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
                 // In Vulkan, we push constants *after* binding the pipeline but before drawing
                 std::static_pointer_cast<Heron::VulkanShader>(m_MeshShader)->Bind();
             }
-            Heron::RenderCommand::DrawIndexed(it->second);
+            Heron::RenderCommand::DrawIndexed(vaoToBind);
         }
     }
 
-    // --- Skybox Rendering ---
-    bool isVulkanRender = Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan;
-    auto skyboxView = registry.view<Heron::SkyboxComponent>();
-    for (auto entity : skyboxView) {
-        auto& sc = skyboxView.get<Heron::SkyboxComponent>(entity);
-        if (sc.Texture) {
-            if (!isVulkanRender) {
-                glDepthFunc(GL_LEQUAL); // Render skybox behind everything
-            }
 
-            if (isVulkanRender && m_VulkanSwapchain) {
-                auto vkShader = std::static_pointer_cast<Heron::VulkanShader>(m_SkyboxShader);
-                vkShader->BuildPipeline(m_VulkanSwapchain->GetRenderPass(), m_SkyboxVAO->GetVertexBuffers()[0]->GetLayout(), true, false);
-            }
-
-            m_SkyboxShader->Bind();
-            
-            // Extract projection and ONLY the rotation part of the view matrix
-            glm::mat4 view = glm::mat4(1.0f);
-            glm::mat4 projection = glm::mat4(1.0f);
-            
-            if (m_SceneState == SceneState::Play) {
-                auto cameraView = m_ActiveScene->GetRegistry().view<Heron::TransformComponent, Heron::CameraComponent>();
-                for (auto camEnt : cameraView) {
-                    auto [transform, camera] = cameraView.get<Heron::TransformComponent, Heron::CameraComponent>(camEnt);
-                    if (camera.Primary) {
-                        float aspect = (float)width() / (float)height();
-                        projection = glm::perspective(glm::radians(camera.FOV), aspect, camera.NearClip, camera.FarClip);
-                        
-                        glm::mat4 model = glm::mat4(1.0f);
-                        model = glm::translate(model, glm::vec3(transform.Translation[0], transform.Translation[1], transform.Translation[2]));
-                        model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
-                        model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
-                        model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
-                        
-                        view = glm::inverse(model);
-                        break;
-                    }
-                }
-            } else {
-                projection = m_Camera.GetProjection();
-                view = m_Camera.GetViewMatrix();
-            }
-
-            // Remove translation from view matrix
-            view = glm::mat4(glm::mat3(view));
-            
-            if (isVulkanRender) {
-                Heron::VulkanShader::SceneData skyboxSceneData{};
-                skyboxSceneData.ViewProjection = projection * view;
-                std::static_pointer_cast<Heron::VulkanShader>(m_SkyboxShader)->SetSceneData(skyboxSceneData);
-            } else {
-                m_SkyboxShader->SetMat4("u_View", view);
-                m_SkyboxShader->SetMat4("u_Projection", projection);
-            }
-            
-            sc.Texture->Bind(0);
-            m_SkyboxShader->SetInt("u_Skybox", 0);
-            
-            m_SkyboxVAO->Bind();
-            if (isVulkanRender) {
-                std::static_pointer_cast<Heron::VulkanShader>(m_SkyboxShader)->Bind();
-                Heron::RenderCommand::DrawIndexed(m_SkyboxVAO);
-            } else {
-                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-            }
-            
-            if (!isVulkanRender) {
-                glDepthFunc(GL_LESS); // Restore default
-            }
-            break; // Only render one skybox
-        }
-    }
 }
 
 // ============================================================
@@ -751,26 +818,11 @@ void ViewportWidget::resizeGL(int w, int h)
     m_Camera.OnResize(w, h);
 }
 
-void ViewportWidget::resizeEvent(QResizeEvent* event)
-{
-    if (m_Initialized) {
-        resizeGL(event->size().width(), event->size().height());
-    }
-    QWidget::resizeEvent(event);
-}
 
-void ViewportWidget::paintEvent(QPaintEvent* event)
-{
-    if (!m_Initialized) {
-        initializeGL();
-        resizeGL(width(), height());
-        m_Initialized = true;
-    }
-    paintGL();
-}
 
 void ViewportWidget::paintGL()
 {
+	HRN_CORE_TRACE("paintGL START");
 	bool isVulkan = Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan;
 
 	if (isVulkan) {
@@ -787,8 +839,144 @@ void ViewportWidget::paintGL()
 		glEnable(GL_DEPTH_TEST);
 	}
 
-	// 1) Draw infinite grid (only in Edit mode)
-	if (m_SceneState == SceneState::Edit) {
+	// DEBUG: Dump registry if Skybox is missing!
+	if (!isVulkan && m_ActiveScene) {
+		auto skyboxView = m_ActiveScene->GetRegistry().view<Heron::SkyboxComponent>();
+		if (skyboxView.empty()) {
+			static int s_DumpCount = 0;
+			if (s_DumpCount < 1) { // Only dump once to avoid spam
+				HRN_CORE_ERROR("SKYBOX VIEW IS EMPTY!");
+				m_ActiveScene->GetRegistry().each([&](auto entity) {
+					Heron::Entity e(entity, m_ActiveScene.get());
+					bool hasTransform = e.HasComponent<Heron::TransformComponent>();
+					bool hasMesh = e.HasComponent<Heron::MeshComponent>();
+					bool hasSkybox = e.HasComponent<Heron::SkyboxComponent>();
+					HRN_CORE_ERROR("Entity {0} - Transform: {1}, Mesh: {2}, Skybox: {3}", (uint32_t)entity, hasTransform, hasMesh, hasSkybox);
+				});
+				s_DumpCount++;
+			}
+		}
+	}
+
+	// 0) Draw Skybox first (so transparent grid doesn't occlude it with depth writes)
+	if (!isVulkan && m_ActiveScene) {
+		auto skyboxView = m_ActiveScene->GetRegistry().view<Heron::SkyboxComponent>();
+		for (auto entity : skyboxView) {
+			auto& sc = skyboxView.get<Heron::SkyboxComponent>(entity);
+			
+			if (!sc.Texture) {
+				bool hasAll = true;
+				for (int i=0; i<6; i++) {
+					if (sc.TexturePaths[i].empty()) hasAll = false;
+				}
+				if (hasAll) {
+					std::vector<std::string> paths;
+					for (int i=0; i<6; i++) paths.push_back(sc.TexturePaths[i]);
+					sc.Texture = Heron::TextureCube::Create(paths);
+				}
+			}
+			
+			if (sc.Texture) {
+				glDepthMask(GL_FALSE); // Don't write to depth buffer
+				glDisable(GL_DEPTH_TEST); // Force draw over background
+
+				m_SkyboxShader->Bind();
+				
+				glm::mat4 view = glm::mat4(1.0f);
+				glm::mat4 projection = glm::mat4(1.0f);
+				
+				if (m_ViewMode == ViewMode::Game) {
+					auto cameraView = m_ActiveScene->GetRegistry().view<Heron::TransformComponent, Heron::CameraComponent>();
+					for (auto camEnt : cameraView) {
+						auto [transform, camera] = cameraView.get<Heron::TransformComponent, Heron::CameraComponent>(camEnt);
+						if (camera.Primary) {
+							float aspect = (float)width() / (float)height();
+							projection = glm::perspective(glm::radians(camera.FOV), aspect, camera.NearClip, camera.FarClip);
+							
+							glm::mat4 model = glm::mat4(1.0f);
+							model = glm::translate(model, glm::vec3(transform.Translation[0], transform.Translation[1], transform.Translation[2]));
+							model = glm::rotate(model, transform.Rotation[0], glm::vec3(1, 0, 0));
+							model = glm::rotate(model, transform.Rotation[1], glm::vec3(0, 1, 0));
+							model = glm::rotate(model, transform.Rotation[2], glm::vec3(0, 0, 1));
+							
+							view = glm::inverse(model);
+							break;
+						}
+					}
+				} else {
+					projection = m_Camera.GetProjection();
+					view = m_Camera.GetViewMatrix();
+				}
+
+				view = glm::mat4(glm::mat3(view));
+				
+				m_SkyboxShader->SetMat4("u_View", view);
+				m_SkyboxShader->SetMat4("u_Projection", projection);
+				
+				sc.Texture->Bind(0);
+				m_SkyboxShader->SetInt("u_Skybox", 0);
+				
+				m_SkyboxVAO->Bind();
+				glDisable(GL_CULL_FACE);
+				glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				glEnable(GL_CULL_FACE);
+				
+				glEnable(GL_DEPTH_TEST);
+				glDepthMask(GL_TRUE);
+				break;
+			}
+		}
+	}
+
+	// 1) Draw all spawned mesh entities (Opaque)
+	RenderEntities();
+
+    // 1.5) Draw Terrain entities
+    if (m_ActiveScene) {
+        auto terrainView = m_ActiveScene->GetRegistry().view<Heron::TransformComponent, Heron::TerrainComponent>();
+        for (auto entity : terrainView) {
+            auto& transform = terrainView.get<Heron::TransformComponent>(entity);
+            auto& terrain = terrainView.get<Heron::TerrainComponent>(entity);
+
+            if (!terrain.Mesh) {
+                terrain.Mesh = Heron::TerrainGenerator::GenerateTerrain(terrain);
+            }
+
+            if (terrain.Mesh) {
+                Heron::Entity e{ entity, m_ActiveScene.get() };
+                glm::mat4 model = e.GetWorldTransform();
+
+                m_MeshShader->SetMat4("u_Model", model);
+                m_MeshShader->SetFloat4("u_Color", glm::vec4(1.0f)); // White base color
+
+                if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+                    auto pass = m_VulkanSwapchain->GetRenderPass();
+                    auto vkShader = std::static_pointer_cast<Heron::VulkanShader>(m_MeshShader);
+                    vkShader->BuildPipeline(pass, terrain.Mesh->GetVertexBuffers()[0]->GetLayout(), true, false);
+                }
+
+                if (!terrain.Texture && !terrain.TexturePath.empty()) {
+                    terrain.Texture = Heron::Texture2D::Create(terrain.TexturePath);
+                }
+
+                if (terrain.Texture) {
+                    terrain.Texture->Bind(0);
+                } else if (m_WhiteTexture) {
+                    m_WhiteTexture->Bind(0);
+                }
+                m_MeshShader->SetInt("u_Texture", 0);
+
+                terrain.Mesh->Bind();
+                if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::Vulkan) {
+                    std::static_pointer_cast<Heron::VulkanShader>(m_MeshShader)->Bind();
+                }
+                Heron::RenderCommand::DrawIndexed(terrain.Mesh);
+            }
+        }
+    }
+
+	// 2) Draw infinite grid (only in Scene mode)
+	if (m_ViewMode == ViewMode::Scene) {
 		if (isVulkan && m_VulkanSwapchain) {
 			auto vkShader = std::static_pointer_cast<Heron::VulkanShader>(m_GridShader);
 			vkShader->BuildPipeline(m_VulkanSwapchain->GetRenderPass(), m_GridVAO->GetVertexBuffers()[0]->GetLayout(), true, false);
@@ -797,24 +985,28 @@ void ViewportWidget::paintGL()
 		// Bind dummy texture to slot 0 for Vulkan descriptor set validation
 		if (m_WhiteTexture) m_WhiteTexture->Bind(0);
 
-		// OpenGL path: pass projection and view separately via uniforms
+		m_GridShader->Bind();
 		if (!isVulkan) {
-			m_GridShader->SetMat4("u_ViewProjection", m_Camera.GetProjection());
-			m_GridShader->SetMat4("u_Model", m_Camera.GetViewMatrix());
+			glm::mat4 view = m_Camera.GetViewMatrix();
+			glm::mat4 proj = m_Camera.GetProjection();
+			m_GridShader->SetMat4("u_View", view);
+			m_GridShader->SetMat4("u_Proj", proj);
+			m_GridShader->SetMat4("u_InvView", glm::inverse(view));
+			m_GridShader->SetMat4("u_InvProj", glm::inverse(proj));
+			m_GridShader->SetFloat("u_Near", 0.1f);
+			m_GridShader->SetFloat("u_Far", 1000.0f);
 		}
-		// Vulkan path: Grid reads u_ViewProjection from SceneData UBO (set in RenderEntities)
 		
 		m_GridVAO->Bind();
-		m_GridShader->Bind();
-
 		Heron::RenderCommand::DrawIndexed(m_GridVAO);
 	}
 
-	// 2) Draw all spawned mesh entities
-	RenderEntities();
-
-	// 3) Draw Gizmo
-	DrawGizmo();
+	// 3) Draw Gizmo (only in Scene mode)
+	if (m_ViewMode == ViewMode::Scene) {
+		HRN_CORE_TRACE("paintGL -> DrawGizmo START");
+		DrawGizmo();
+		HRN_CORE_TRACE("paintGL -> DrawGizmo END");
+	}
 
 	if (isVulkan) {
 		m_VulkanSwapchain->EndFrame();
@@ -843,6 +1035,19 @@ void ViewportWidget::SetSceneState(SceneState state)
         m_ScoreLabel->setText("Score: 0");
         m_ScoreLabel->show();
     } else {
+        // Stop all music when leaving Play mode
+        if (m_ActiveScene) {
+            auto& reg = m_ActiveScene->GetRegistry();
+            auto audioView = reg.view<Heron::AudioComponent>();
+            for (auto e : audioView) {
+                auto& ac = audioView.get<Heron::AudioComponent>(e);
+                if (ac.WasPlaying) {
+                    Heron::AudioSystem::StopTrack((uint32_t)(entt::entity)e);
+                    ac.WasPlaying = false;
+                    ac.CurrentTrackIndex = -1;
+                }
+            }
+        }
         m_ActiveScene = m_EditorScene;
         m_ScoreLabel->hide();
     }
@@ -922,7 +1127,9 @@ void ViewportWidget::spawnCube()
     auto entity = m_ActiveScene->CreateEntity("Cube_" + std::to_string(m_SpawnCounter));
     auto& mesh = entity.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Cube);
     mesh.Color[0] = 0.6f; mesh.Color[1] = 0.65f; mesh.Color[2] = 0.75f; mesh.Color[3] = 1.0f;
+    m_SelectedEntity = entity;
     emit EntitySpawned();
+    emit PropertiesChanged();
 }
 
 void ViewportWidget::spawnPlane()
@@ -931,7 +1138,9 @@ void ViewportWidget::spawnPlane()
     auto entity = m_ActiveScene->CreateEntity("Plane_" + std::to_string(m_SpawnCounter));
     auto& mesh = entity.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Plane);
     mesh.Color[0] = 0.45f; mesh.Color[1] = 0.55f; mesh.Color[2] = 0.45f; mesh.Color[3] = 1.0f;
+    m_SelectedEntity = entity;
     emit EntitySpawned();
+    emit PropertiesChanged();
 }
 
 void ViewportWidget::spawnCylinder()
@@ -940,19 +1149,36 @@ void ViewportWidget::spawnCylinder()
     auto entity = m_ActiveScene->CreateEntity("Cylinder_" + std::to_string(m_SpawnCounter));
     auto& mesh = entity.AddComponent<Heron::MeshComponent>(Heron::PrimitiveType::Cylinder);
     mesh.Color[0] = 0.7f; mesh.Color[1] = 0.5f; mesh.Color[2] = 0.4f; mesh.Color[3] = 1.0f;
+    m_SelectedEntity = entity;
     emit EntitySpawned();
+    emit PropertiesChanged();
 }
 
 // ============================================================
 //  MOUSE INPUT — Pan, Rotate, Zoom + Right-click context menu
 // ============================================================
+void ViewportWidget::enterEvent(QEnterEvent* event)
+{
+    Heron::Input::SetViewportHovered(true);
+    QOpenGLWidget::enterEvent(event);
+}
+
+void ViewportWidget::leaveEvent(QEvent* event)
+{
+    Heron::Input::SetViewportHovered(false);
+    QOpenGLWidget::leaveEvent(event);
+}
+
 void ViewportWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (m_ViewMode == ViewMode::Game) return;
+
     m_LastMousePosition = event->position();
     m_RightClickDragged = false;
     setFocus();
 
     if (event->button() == Qt::LeftButton && m_GizmoMode != GizmoMode::None && m_SelectedEntity) {
+
         auto& transform = m_SelectedEntity.GetComponent<Heron::TransformComponent>();
         glm::vec3 objPos(transform.Translation[0], transform.Translation[1], transform.Translation[2]);
         
@@ -1019,6 +1245,8 @@ void ViewportWidget::mousePressEvent(QMouseEvent* event)
 
 void ViewportWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (m_ViewMode == ViewMode::Game) return;
+
     if (m_GizmoDragging && event->button() == Qt::LeftButton) {
         m_GizmoDragging = false;
         m_ActiveGizmoAxis = -1;
@@ -1032,6 +1260,8 @@ void ViewportWidget::mouseReleaseEvent(QMouseEvent* event)
 
 void ViewportWidget::mouseMoveEvent(QMouseEvent* event)
 {
+    if (m_ViewMode == ViewMode::Game) return;
+
     QPointF currentPosition = event->position();
     glm::vec2 delta = {
         (float)(currentPosition.x() - m_LastMousePosition.x()),
@@ -1130,6 +1360,8 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event)
 
 void ViewportWidget::wheelEvent(QWheelEvent* event)
 {
+    if (m_ViewMode == ViewMode::Game) return;
+
     float delta = event->angleDelta().y() * 0.01f;
     m_Camera.MouseZoom(delta);
     event->accept();

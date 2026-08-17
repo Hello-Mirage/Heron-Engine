@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 // EnTT
 #include <entt/entt.hpp>
@@ -19,7 +20,16 @@ namespace Heron {
 			: Tag(tag) {}
 	};
 
+	struct RelationshipComponent {
+		entt::entity Parent = entt::null;
+		std::vector<entt::entity> Children;
+
+		RelationshipComponent() = default;
+		RelationshipComponent(const RelationshipComponent&) = default;
+	};
+
 	struct TransformComponent {
+
 		float Translation[3] = { 0.0f, 0.0f, 0.0f };
 		float Rotation[3] = { 0.0f, 0.0f, 0.0f };
 		float Scale[3] = { 1.0f, 1.0f, 1.0f };
@@ -79,7 +89,8 @@ namespace Heron {
 		Cube,
 		Plane,
 		Cylinder,
-		Sphere
+		Sphere,
+		Custom
 	};
 
 	struct MeshComponent {
@@ -87,6 +98,7 @@ namespace Heron {
 		float Color[4] = { 0.8f, 0.8f, 0.8f, 1.0f };
 		Ref<class Texture2D> Texture;
 		std::string TexturePath = ""; // Keep track of path for UI
+		std::string ModelPath = "";   // Keep track of custom OBJ path
 
 		MeshComponent() = default;
 		MeshComponent(const MeshComponent&) = default;
@@ -113,4 +125,40 @@ namespace Heron {
 		SkyboxComponent(const SkyboxComponent&) = default;
 	};
 
+	struct AudioComponent {
+		std::vector<std::string> AudioPaths; // Playlist of audio file paths
+		bool Play = false;                   // Toggle to start/stop playback
+		bool Shuffle = true;                 // Shuffle mode
+		bool Loop = true;                    // Loop playlist when it ends
+
+		// Internal playback state (not serialized as settings)
+		int  CurrentTrackIndex = -1;
+		bool WasPlaying = false;
+
+		AudioComponent() = default;
+		AudioComponent(const AudioComponent&) = default;
+	};
+
+	struct TerrainComponent {
+		std::string HeightmapPath = "";
+		Ref<class Texture2D> Texture = nullptr;
+		std::string TexturePath = ""; // Path for the diffuse texture
+		
+		float Size = 100.0f; // Width and Depth of the terrain
+		float HeightScale = 20.0f; // Maximum height of the terrain
+		int Resolution = 100; // Grid resolution (100x100 quads)
+		
+		Ref<class VertexArray> Mesh = nullptr;
+        std::vector<unsigned char> HeightmapData;
+        int HeightmapWidth = 0;
+        int HeightmapHeight = 0;
+		
+        std::vector<float> RuntimeHeightData;
+        struct b3HeightFieldData* RuntimeHeightField = nullptr;
+
+		TerrainComponent() = default;
+		TerrainComponent(const TerrainComponent&) = default;
+	};
+
 }
+

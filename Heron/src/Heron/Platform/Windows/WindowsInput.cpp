@@ -84,4 +84,34 @@ namespace Heron {
 		return y;
 	}
 
+	static bool s_CursorLocked = false;
+
+	void Input::SetCursorMode(CursorMode mode) {
+		if (mode == CursorMode::Locked) {
+			if (!s_CursorLocked) {
+				ShowCursor(FALSE);
+				s_CursorLocked = true;
+			}
+		} else {
+			if (s_CursorLocked) {
+				ShowCursor(TRUE);
+				s_CursorLocked = false;
+			}
+		}
+	}
+
+	void Input::SetMousePosition(float x, float y) {
+		SetCursorPos((int)x, (int)y);
+	}
+
+	static bool s_ViewportHovered = false;
+
+	bool Input::IsViewportHovered() {
+		return s_ViewportHovered;
+	}
+
+	void Input::SetViewportHovered(bool hovered) {
+		s_ViewportHovered = hovered;
+	}
+
 }

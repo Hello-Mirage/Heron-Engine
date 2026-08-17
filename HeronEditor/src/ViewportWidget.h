@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QWidget>
+#include <QOpenGLWidget>
 #include <QTimer>
 #include <Heron/Heron.h>
 #include <Heron/Renderer/EditorCamera.h>
@@ -10,7 +10,7 @@
 
 class QLabel;
 
-class ViewportWidget : public QWidget
+class ViewportWidget : public QOpenGLWidget
 {
     Q_OBJECT
 
@@ -21,6 +21,11 @@ public:
     enum class SceneState { Edit, Play };
     void SetSceneState(SceneState state);
     SceneState GetSceneState() const { return m_SceneState; }
+
+    enum class ViewMode { Scene, Game };
+    void SetViewMode(ViewMode mode) { m_ViewMode = mode; }
+    ViewMode GetViewMode() const { return m_ViewMode; }
+
 
     Heron::Scene* GetScene() { return m_ActiveScene.get(); }
     Heron::Ref<Heron::Scene> GetSceneRef() { return m_ActiveScene; }
@@ -39,19 +44,16 @@ public slots:
     void SetSelectedEntity(Heron::Entity entity) { m_SelectedEntity = entity; }
 
 protected:
-    QPaintEngine* paintEngine() const override { return nullptr; }
-
-    void initializeGL();
-    void resizeGL(int w, int h);
-    void paintGL();
-
-    void paintEvent(QPaintEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
 
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void enterEvent(QEnterEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private slots:
     void updateGameLoop();
@@ -78,6 +80,7 @@ private:
     QPointF m_LastMousePosition;
     bool m_RightClickDragged = false;
     SceneState m_SceneState = SceneState::Edit;
+    ViewMode m_ViewMode = ViewMode::Scene;
     GizmoMode m_GizmoMode = GizmoMode::None;
     
     // Gizmo state
@@ -98,6 +101,10 @@ private:
     std::shared_ptr<Heron::VulkanSwapchain> m_VulkanSwapchain;
     VkSurfaceKHR m_VulkanSurface = VK_NULL_HANDLE;
 
+    // OpenGL Context
+    void* m_hDC = nullptr;
+    void* m_hGLRC = nullptr;
+
     // Mouse Tracking
     QPoint m_LastMousePos;
 
@@ -113,7 +120,10 @@ private:
     // Mesh rendering
     Heron::Ref<Heron::Shader> m_MeshShader;
     std::unordered_map<int, Heron::Ref<Heron::VertexArray>> m_PrimitiveMeshes;
+    std::unordered_map<std::string, Heron::Ref<Heron::VertexArray>> m_CustomMeshes;
     Heron::Ref<class Heron::Texture2D> m_WhiteTexture;
+
+    Heron::Ref<Heron::VertexArray> LoadCustomMesh(const std::string& path);
 
     // Skybox rendering
     Heron::Ref<Heron::Shader> m_SkyboxShader;

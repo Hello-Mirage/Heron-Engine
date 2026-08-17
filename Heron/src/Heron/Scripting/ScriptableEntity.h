@@ -36,6 +36,9 @@ namespace Heron {
 			return m_Entity.m_Scene->FindEntityByName(name);
 		}
 
+		Entity GetEntity() { return m_Entity; }
+		Scene* GetScene() { return m_Entity.m_Scene; }
+
 	private:
 		Entity m_Entity;
 		friend class Scene;

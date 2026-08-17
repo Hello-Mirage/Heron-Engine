@@ -9,8 +9,10 @@
 
 class QFileSystemModel;
 class QTreeView;
+class QTabBar;
 
 class EditorWindow : public QMainWindow
+
 {
     Q_OBJECT
 
@@ -44,6 +46,7 @@ private:
     void UnloadGameDLL();
 
     ViewportWidget* m_Viewport;
+    QTabBar* m_ViewTabBar;
     SceneHierarchyPanel* m_HierarchyPanel;
     PropertiesPanel* m_PropertiesPanel;
     QToolBar* m_ToolBar;

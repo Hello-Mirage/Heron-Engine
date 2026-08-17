@@ -22,6 +22,8 @@ namespace Heron {
 	public:
 		static Ref<Texture2D> Create(uint32_t width, uint32_t height);
 		static Ref<Texture2D> Create(const std::string& path);
+
+		virtual void SetData(void* data, uint32_t size) {}
 	};
 
 	class TextureCube : public Texture {

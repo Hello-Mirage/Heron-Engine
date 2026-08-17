@@ -89,6 +89,10 @@ namespace Heron {
 			auto& mc = entity.GetComponent<MeshComponent>();
 			out << YAML::Key << "Type" << YAML::Value << (int)mc.Type;
 			WRITE_VEC4(out, "Color", mc.Color);
+			if (!mc.TexturePath.empty())
+				out << YAML::Key << "TexturePath" << YAML::Value << mc.TexturePath;
+			if (!mc.ModelPath.empty())
+				out << YAML::Key << "ModelPath" << YAML::Value << mc.ModelPath;
 			out << YAML::EndMap;
 		}
 
@@ -150,6 +154,19 @@ namespace Heron {
 			out << YAML::EndMap;
 		}
 
+		if (entity.HasComponent<RelationshipComponent>()) {
+			out << YAML::Key << "RelationshipComponent";
+			out << YAML::BeginMap;
+			auto& rc = entity.GetComponent<RelationshipComponent>();
+			out << YAML::Key << "Parent" << YAML::Value << (uint32_t)rc.Parent;
+			out << YAML::Key << "Children" << YAML::Value << YAML::BeginSeq;
+			for (auto child : rc.Children) {
+				out << (uint32_t)child;
+			}
+			out << YAML::EndSeq;
+			out << YAML::EndMap;
+		}
+
 		out << YAML::EndMap; // Entity
 	}
 
@@ -188,6 +205,8 @@ namespace Heron {
 
 		auto entities = data["Entities"];
 		if (entities) {
+			std::unordered_map<uint32_t, entt::entity> enttMap;
+
 			for (auto entity : entities) {
 				uint32_t uuid = entity["Entity"].as<uint32_t>();
 
@@ -197,6 +216,7 @@ namespace Heron {
 					name = tagComponent["Tag"].as<std::string>();
 
 				Entity deserializedEntity = m_Scene->CreateEntity(name);
+				enttMap[uuid] = (entt::entity)deserializedEntity;
 
 				auto transformComponent = entity["TransformComponent"];
 				if (transformComponent) {
@@ -224,6 +244,11 @@ namespace Heron {
 					mc.Color[1] = meshComponent["Color"][1].as<float>();
 					mc.Color[2] = meshComponent["Color"][2].as<float>();
 					mc.Color[3] = meshComponent["Color"][3].as<float>();
+					
+					if (meshComponent["TexturePath"])
+						mc.TexturePath = meshComponent["TexturePath"].as<std::string>();
+					if (meshComponent["ModelPath"])
+						mc.ModelPath = meshComponent["ModelPath"].as<std::string>();
 				}
 
 				auto rigidBodyComponent = entity["RigidBody3DComponent"];
@@ -287,7 +312,42 @@ namespace Heron {
 						sc.Texture = TextureCube::Create(paths);
 					}
 				}
+
+				auto relComponent = entity["RelationshipComponent"];
+				if (relComponent) {
+					auto& rc = deserializedEntity.GetComponent<RelationshipComponent>();
+					rc.Parent = (entt::entity)relComponent["Parent"].as<uint32_t>();
+					rc.Children.clear();
+					auto childrenNode = relComponent["Children"];
+					if (childrenNode) {
+						for (auto child : childrenNode) {
+							rc.Children.push_back((entt::entity)child.as<uint32_t>());
+						}
+					}
+				}
 			}
+
+			// Pass 2: Remap RelationshipComponent IDs
+			m_Scene->GetRegistry().view<RelationshipComponent>().each([&](auto entityID, auto& rc) {
+				if (rc.Parent != entt::null) {
+					if (enttMap.find((uint32_t)rc.Parent) != enttMap.end()) {
+						rc.Parent = enttMap[(uint32_t)rc.Parent];
+					} else {
+						rc.Parent = entt::null;
+					}
+				}
+				for (size_t i = 0; i < rc.Children.size(); i++) {
+					uint32_t oldChild = (uint32_t)rc.Children[i];
+					if (enttMap.find(oldChild) != enttMap.end()) {
+						rc.Children[i] = enttMap[oldChild];
+					} else {
+						rc.Children[i] = entt::null;
+					}
+				}
+				
+				// Clean up any null children (if they didn't map correctly)
+				rc.Children.erase(std::remove(rc.Children.begin(), rc.Children.end(), entt::null), rc.Children.end());
+			});
 		}
 
 		return true;

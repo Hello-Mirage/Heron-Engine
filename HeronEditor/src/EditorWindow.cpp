@@ -17,6 +17,7 @@
 #include <Heron/Scene/SceneSerializer.h>
 #include <windows.h>
 #include <QProcess>
+#include <QTabBar>
 
 EditorWindow::EditorWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -24,9 +25,31 @@ EditorWindow::EditorWindow(QWidget *parent)
     setWindowTitle("Heron Engine - Editor");
     resize(1280, 720);
 
-    // Main 3D Viewport
-    m_Viewport = new ViewportWidget(this);
-    setCentralWidget(m_Viewport);
+    // Setup Central Widget with Tab Bar
+    QWidget* centralContainer = new QWidget(this);
+    QVBoxLayout* centralLayout = new QVBoxLayout(centralContainer);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+
+    m_ViewTabBar = new QTabBar(centralContainer);
+    m_ViewTabBar->addTab("Scene");
+    m_ViewTabBar->addTab("Game");
+
+    m_Viewport = new ViewportWidget(centralContainer);
+    
+    centralLayout->addWidget(m_ViewTabBar);
+    centralLayout->addWidget(m_Viewport);
+
+    setCentralWidget(centralContainer);
+
+    connect(m_ViewTabBar, &QTabBar::currentChanged, this, [this](int index) {
+        if (index == 0) {
+            m_Viewport->SetViewMode(ViewportWidget::ViewMode::Scene);
+        } else {
+            m_Viewport->SetViewMode(ViewportWidget::ViewMode::Game);
+        }
+        m_Viewport->update();
+    });
 
     CreateMenuBar();
     CreateToolBar();

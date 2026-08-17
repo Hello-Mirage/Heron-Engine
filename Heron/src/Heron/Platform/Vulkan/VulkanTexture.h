@@ -25,12 +25,12 @@ namespace Heron {
 
 	private:
 		std::string m_Path;
-		uint32_t m_Width, m_Height;
+		uint32_t m_Width = 0, m_Height = 0;
 		
-		VkImage m_Image;
-		VkDeviceMemory m_ImageMemory;
-		VkImageView m_ImageView;
-		VkSampler m_Sampler;
+		VkImage m_Image = VK_NULL_HANDLE;
+		VkDeviceMemory m_ImageMemory = VK_NULL_HANDLE;
+		VkImageView m_ImageView = VK_NULL_HANDLE;
+		VkSampler m_Sampler = VK_NULL_HANDLE;
 	};
 
 	class VulkanTextureCube : public TextureCube {
@@ -48,12 +48,12 @@ namespace Heron {
 		}
 
 	private:
-		uint32_t m_Width, m_Height;
+		uint32_t m_Width = 0, m_Height = 0;
 		
-		VkImage m_Image;
-		VkDeviceMemory m_ImageMemory;
-		VkImageView m_ImageView;
-		VkSampler m_Sampler;
+		VkImage m_Image = VK_NULL_HANDLE;
+		VkDeviceMemory m_ImageMemory = VK_NULL_HANDLE;
+		VkImageView m_ImageView = VK_NULL_HANDLE;
+		VkSampler m_Sampler = VK_NULL_HANDLE;
 	};
 
 }
