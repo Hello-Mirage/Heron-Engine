@@ -132,6 +132,19 @@ namespace Heron {
 			out << YAML::EndMap;
 		}
 
+		if (entity.HasComponent<TerrainComponent>()) {
+			out << YAML::Key << "TerrainComponent";
+			out << YAML::BeginMap;
+			auto& tc = entity.GetComponent<TerrainComponent>();
+			out << YAML::Key << "HeightmapPath" << YAML::Value << tc.HeightmapPath;
+			out << YAML::Key << "TexturePath" << YAML::Value << tc.TexturePath;
+			out << YAML::Key << "Size" << YAML::Value << tc.Size;
+			out << YAML::Key << "HeightScale" << YAML::Value << tc.HeightScale;
+			out << YAML::Key << "Resolution" << YAML::Value << tc.Resolution;
+			out << YAML::Key << "TextureTiling" << YAML::Value << tc.TextureTiling;
+			out << YAML::EndMap;
+		}
+
 		if (entity.HasComponent<LightComponent>()) {
 			out << YAML::Key << "LightComponent";
 			out << YAML::BeginMap;
@@ -289,6 +302,21 @@ namespace Heron {
 					lc.Color[1] = lightComponent["Color"][1].as<float>();
 					lc.Color[2] = lightComponent["Color"][2].as<float>();
 					lc.Intensity = lightComponent["Intensity"].as<float>();
+				}
+
+				auto terrainComponent = entity["TerrainComponent"];
+				if (terrainComponent) {
+					auto& tc = deserializedEntity.AddComponent<TerrainComponent>();
+					tc.HeightmapPath = terrainComponent["HeightmapPath"].as<std::string>();
+					tc.TexturePath = terrainComponent["TexturePath"].as<std::string>();
+					tc.Size = terrainComponent["Size"].as<float>();
+					tc.HeightScale = terrainComponent["HeightScale"].as<float>();
+					tc.Resolution = terrainComponent["Resolution"].as<int>();
+					if (terrainComponent["TextureTiling"]) {
+						tc.TextureTiling = terrainComponent["TextureTiling"].as<float>();
+					} else {
+						tc.TextureTiling = 1.0f; // Default if not present in older save files
+					}
 				}
 
 				auto skyboxComponent = entity["SkyboxComponent"];

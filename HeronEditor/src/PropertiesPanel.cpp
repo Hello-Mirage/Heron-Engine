@@ -247,12 +247,14 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     m_TerrainSize = new QLineEdit(); m_TerrainSize->setValidator(validator);
     m_TerrainHeightScale = new QLineEdit(); m_TerrainHeightScale->setValidator(validator);
     m_TerrainResolution = new QLineEdit(); m_TerrainResolution->setValidator(new QIntValidator(this));
+    m_TerrainTextureTiling = new QLineEdit(); m_TerrainTextureTiling->setValidator(validator);
 
     connect(m_TerrainHeightmapBtn, &QPushButton::clicked, this, &PropertiesPanel::OnTerrainHeightmapClicked);
     connect(m_TerrainTextureBtn, &QPushButton::clicked, this, &PropertiesPanel::OnTerrainTextureClicked);
     connect(m_TerrainSize, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
     connect(m_TerrainHeightScale, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
     connect(m_TerrainResolution, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
+    connect(m_TerrainTextureTiling, &QLineEdit::textEdited, this, &PropertiesPanel::OnTerrainValuesChanged);
 
     terrainLayout->addRow("Heightmap", m_TerrainHeightmapBtn);
     terrainLayout->addRow("Current Map:", m_TerrainHeightmapLabel);
@@ -261,6 +263,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     terrainLayout->addRow("Size (Width/Depth)", m_TerrainSize);
     terrainLayout->addRow("Height Scale", m_TerrainHeightScale);
     terrainLayout->addRow("Resolution", m_TerrainResolution);
+    terrainLayout->addRow("Texture Tiling", m_TerrainTextureTiling);
 
     m_OpenTerrainEditorBtn = new QPushButton("Open Terrain Editor");
     connect(m_OpenTerrainEditorBtn, &QPushButton::clicked, this, [this]() {
@@ -599,14 +602,17 @@ void PropertiesPanel::DrawComponents()
         m_TerrainSize->blockSignals(true);
         m_TerrainHeightScale->blockSignals(true);
         m_TerrainResolution->blockSignals(true);
+        m_TerrainTextureTiling->blockSignals(true);
         
         m_TerrainSize->setText(QString::number(terrain.Size));
         m_TerrainHeightScale->setText(QString::number(terrain.HeightScale));
         m_TerrainResolution->setText(QString::number(terrain.Resolution));
+        m_TerrainTextureTiling->setText(QString::number(terrain.TextureTiling));
         
         m_TerrainSize->blockSignals(false);
         m_TerrainHeightScale->blockSignals(false);
         m_TerrainResolution->blockSignals(false);
+        m_TerrainTextureTiling->blockSignals(false);
 
         if (terrain.HeightmapPath.empty()) {
             m_TerrainHeightmapLabel->setText("None");
@@ -957,18 +963,21 @@ void PropertiesPanel::OnTerrainValuesChanged()
         float oldSize = terrain.Size;
         float oldHeight = terrain.HeightScale;
         int oldRes = terrain.Resolution;
+        float oldTiling = terrain.TextureTiling;
         
         terrain.Size = m_TerrainSize->text().toFloat();
         terrain.HeightScale = m_TerrainHeightScale->text().toFloat();
         terrain.Resolution = m_TerrainResolution->text().toInt();
+        terrain.TextureTiling = m_TerrainTextureTiling->text().toFloat();
         
         // Ensure valid constraints
         if (terrain.Size < 1.0f) terrain.Size = 1.0f;
         if (terrain.Resolution < 2) terrain.Resolution = 2;
         if (terrain.Resolution > 1000) terrain.Resolution = 1000;
+        if (terrain.TextureTiling < 0.1f) terrain.TextureTiling = 0.1f;
         
         // Only invalidate mesh if shape parameters changed
-        if (oldSize != terrain.Size || oldHeight != terrain.HeightScale || oldRes != terrain.Resolution) {
+        if (oldSize != terrain.Size || oldHeight != terrain.HeightScale || oldRes != terrain.Resolution || oldTiling != terrain.TextureTiling) {
             terrain.Mesh = nullptr;
         }
     }

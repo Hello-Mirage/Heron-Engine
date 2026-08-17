@@ -61,8 +61,8 @@ namespace Heron {
                 float nx = 0.0f, ny = 1.0f, nz = 0.0f;
                 
                 // UV coordinates
-                float u = (float)x / (float)resolution;
-                float v = (float)z / (float)resolution;
+                float u = ((float)x / (float)resolution) * terrain.TextureTiling;
+                float v = ((float)z / (float)resolution) * terrain.TextureTiling;
 
                 vertices.push_back(px);
                 vertices.push_back(py);

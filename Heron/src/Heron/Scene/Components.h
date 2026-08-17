@@ -147,6 +147,7 @@ namespace Heron {
 		float Size = 100.0f; // Width and Depth of the terrain
 		float HeightScale = 20.0f; // Maximum height of the terrain
 		int Resolution = 100; // Grid resolution (100x100 quads)
+		float TextureTiling = 1.0f; // Texture repeat multiplier
 		
 		Ref<class VertexArray> Mesh = nullptr;
         std::vector<unsigned char> HeightmapData;

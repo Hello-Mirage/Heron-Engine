@@ -131,6 +131,7 @@ private:
     QLineEdit* m_TerrainSize;
     QLineEdit* m_TerrainHeightScale;
     QLineEdit* m_TerrainResolution;
+    QLineEdit* m_TerrainTextureTiling;
     QPushButton* m_OpenTerrainEditorBtn;
 
 private:
