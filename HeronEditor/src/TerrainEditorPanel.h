@@ -26,6 +26,9 @@ public:
     float GetBrushSize() const;
     float GetBrushStrength() const;
 
+signals:
+    void ExitRequested();
+
 private:
     Heron::Entity m_SelectionContext;
 
@@ -40,4 +43,6 @@ private:
 
     QSlider* m_BrushStrengthSlider;
     QDoubleSpinBox* m_BrushStrengthSpinBox;
+
+    QPushButton* m_ExitBtn;
 };

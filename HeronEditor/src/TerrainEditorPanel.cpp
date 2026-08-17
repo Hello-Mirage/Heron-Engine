@@ -87,6 +87,12 @@ TerrainEditorPanel::TerrainEditorPanel(QWidget* parent)
 
     mainLayout->addWidget(brushGroup);
     
+    // --- Exit Button ---
+    m_ExitBtn = new QPushButton("Exit Terrain Editor", this);
+    m_ExitBtn->setStyleSheet("background-color: #a33b3b; color: white; font-weight: bold; padding: 5px;");
+    connect(m_ExitBtn, &QPushButton::clicked, this, &TerrainEditorPanel::ExitRequested);
+    mainLayout->addWidget(m_ExitBtn);
+    
     // Disable everything until an entity is selected
     this->setEnabled(false);
 }

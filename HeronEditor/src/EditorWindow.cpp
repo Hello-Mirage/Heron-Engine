@@ -116,6 +116,11 @@ void EditorWindow::CreateTerrainEditorPanel()
         m_TerrainEditorDock->show();
         m_TerrainEditorDock->raise();
     });
+
+    // Connect exit button signal
+    connect(m_TerrainEditorPanel, &TerrainEditorPanel::ExitRequested, this, [this]() {
+        m_TerrainEditorDock->hide();
+    });
 }
 
 void EditorWindow::CreateFileExplorerPanel()
