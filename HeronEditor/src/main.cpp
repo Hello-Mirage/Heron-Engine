@@ -497,6 +497,48 @@ public:
 };
 HERON_REGISTER_SCRIPT(ObstacleSpawner);
 
+class BillboardGrass : public Heron::ScriptableEntity
+{
+public:
+    Heron::Entity Player;
+    float WindStrength = 0.2f;
+    float WindSpeed = 2.0f;
+    float m_Time = 0.0f;
+
+    void OnCreate() override {
+        Player = FindEntityByName("Player");
+        // Add random offset so they don't all sway exactly the same
+        m_Time = (float)(rand() % 100) * 0.1f;
+    }
+
+    void OnUpdate(float dt) override {
+        if (!Player) {
+            Player = FindEntityByName("Player");
+            if (!Player) return;
+        }
+
+        m_Time += dt;
+
+        auto& myTransform = GetComponent<Heron::TransformComponent>();
+        auto& playerTransform = Player.GetComponent<Heron::TransformComponent>();
+
+        // 1. Billboarding (Face the player)
+        float dirX = playerTransform.Translation[0] - myTransform.Translation[0];
+        float dirZ = playerTransform.Translation[2] - myTransform.Translation[2];
+        
+        // Calculate the angle to the player (atan2 returns angle in radians)
+        // Adding Pi/2 (1.57f) because a Quad plane normally faces Z axis
+        float targetYaw = atan2(dirX, dirZ) + 1.570796f; 
+        
+        // 2. Wind Sway (Pitch/Roll animation)
+        float sway = sin(m_Time * WindSpeed) * WindStrength;
+        
+        // Apply Rotations
+        myTransform.Rotation[1] = targetYaw; // Y-axis (Yaw) for billboarding
+        myTransform.Rotation[0] = sway;      // X-axis (Pitch) for wind sway
+    }
+};
+HERON_REGISTER_SCRIPT(BillboardGrass);
 
 class RotateScript : public Heron::ScriptableEntity
 {
