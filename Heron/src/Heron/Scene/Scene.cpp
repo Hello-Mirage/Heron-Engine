@@ -151,6 +151,10 @@ namespace Heron {
                 b3DestroyHeightField(terrain.RuntimeHeightField);
                 terrain.RuntimeHeightField = nullptr;
             }
+            if (!B3_IS_NULL(terrain.RuntimeBody) && !B3_ID_EQUALS(terrain.RuntimeBody, destroyedBody)) {
+                b3DestroyBody(terrain.RuntimeBody);
+                terrain.RuntimeBody = b3_nullBodyId;
+            }
         }
 
 		if (m_Registry.any_of<BoxCollider3DComponent>((entt::entity)entity)) {
@@ -198,6 +202,11 @@ namespace Heron {
 			newEntity.GetComponent<RigidBody3DComponent>().RuntimeBody = b3_nullBodyId;
 		if (newEntity.HasComponent<BoxCollider3DComponent>())
 			newEntity.GetComponent<BoxCollider3DComponent>().RuntimeBody = b3_nullBodyId;
+		if (newEntity.HasComponent<TerrainComponent>()) {
+			auto& tc = newEntity.GetComponent<TerrainComponent>();
+			tc.RuntimeBody = b3_nullBodyId;
+			tc.RuntimeHeightField = nullptr;
+		}
 
 		return newEntity;
 	}
@@ -297,30 +306,6 @@ namespace Heron {
 						b3CreateHullShape(rb.RuntimeBody, &shapeDef, &boxHull.base);
 						box.RuntimeBody = rb.RuntimeBody;
 					}
-
-                    // Add Terrain HeightField if present
-                    if (m_Registry.all_of<TerrainComponent>(e)) {
-                        auto& terrain = m_Registry.get<TerrainComponent>(e);
-                        if (!terrain.RuntimeHeightField && !terrain.RuntimeHeightData.empty()) {
-                            
-                            // 2. Define HeightField
-                            b3HeightFieldDef hfDef = { 0 };
-                            hfDef.heights = terrain.RuntimeHeightData.data();
-                            hfDef.countX = terrain.HeightmapWidth;
-                            hfDef.countZ = terrain.HeightmapHeight;
-                            hfDef.globalMinimumHeight = 0.0f;
-                            hfDef.globalMaximumHeight = terrain.HeightScale;
-                            hfDef.scale = { terrain.Size / (float)(terrain.HeightmapWidth - 1), 
-                                            1.0f, 
-                                            terrain.Size / (float)(terrain.HeightmapHeight - 1) };
-                            
-                            terrain.RuntimeHeightField = b3CreateHeightField(&hfDef);
-                            
-                            b3ShapeDef shapeDef = b3DefaultShapeDef();
-                            shapeDef.density = 0.0f; // Static terrain
-                            b3CreateHeightFieldShape(rb.RuntimeBody, &shapeDef, terrain.RuntimeHeightField);
-                        }
-                    }
 				} else {
 					// Body already exists - check if script or gizmo modified the ECS transform
 					bool positionChanged = false;
@@ -385,6 +370,51 @@ namespace Heron {
 					                                  box.HalfSize[1] * transform.Scale[1], 
 					                                  box.HalfSize[2] * transform.Scale[2]);
 					b3CreateHullShape(box.RuntimeBody, &shapeDef, &boxHull.base);
+				}
+			}
+
+			// Instantiate bodies for standalone Terrains (static bodies)
+			auto viewTerrain = m_Registry.view<TerrainComponent, TransformComponent>();
+			for (auto e : viewTerrain) {
+				auto [terrain, transform] = viewTerrain.get<TerrainComponent, TransformComponent>(e);
+
+				b3BodyId bodyToAttach = b3_nullBodyId;
+				if (m_Registry.all_of<RigidBody3DComponent>(e)) {
+					bodyToAttach = m_Registry.get<RigidBody3DComponent>(e).RuntimeBody;
+				}
+
+				if (B3_IS_NULL(bodyToAttach)) {
+					if (B3_IS_NULL(terrain.RuntimeBody)) {
+						b3BodyDef bodyDef = b3DefaultBodyDef();
+						bodyDef.type = b3_staticBody;
+						bodyDef.position = { transform.Translation[0], transform.Translation[1], transform.Translation[2] };
+						
+						b3Quat rot = b3MakeQuatFromAxisAngle({1, 0, 0}, transform.Rotation[0]);
+						rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 1, 0}, transform.Rotation[1]));
+						rot = b3MulQuat(rot, b3MakeQuatFromAxisAngle({0, 0, 1}, transform.Rotation[2]));
+						bodyDef.rotation = rot;
+
+						terrain.RuntimeBody = b3CreateBody(m_PhysicsWorld, &bodyDef);
+					}
+					bodyToAttach = terrain.RuntimeBody;
+				}
+
+				if (!terrain.RuntimeHeightField && !terrain.RuntimeHeightData.empty()) {
+					b3HeightFieldDef hfDef = { 0 };
+					hfDef.heights = terrain.RuntimeHeightData.data();
+					hfDef.countX = terrain.HeightmapWidth;
+					hfDef.countZ = terrain.HeightmapHeight;
+					hfDef.globalMinimumHeight = 0.0f;
+					hfDef.globalMaximumHeight = terrain.HeightScale;
+					hfDef.scale = { terrain.Size / (float)(terrain.HeightmapWidth - 1), 
+									1.0f, 
+									terrain.Size / (float)(terrain.HeightmapHeight - 1) };
+					
+					terrain.RuntimeHeightField = b3CreateHeightField(&hfDef);
+					
+					b3ShapeDef shapeDef = b3DefaultShapeDef();
+					shapeDef.density = 0.0f; // Static terrain
+					b3CreateHeightFieldShape(bodyToAttach, &shapeDef, terrain.RuntimeHeightField);
 				}
 			}
 

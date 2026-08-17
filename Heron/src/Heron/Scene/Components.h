@@ -156,6 +156,7 @@ namespace Heron {
 		
         std::vector<float> RuntimeHeightData;
         struct b3HeightFieldData* RuntimeHeightField = nullptr;
+        b3BodyId RuntimeBody = b3_nullBodyId;
 
 		TerrainComponent() = default;
 		TerrainComponent(const TerrainComponent&) = default;
