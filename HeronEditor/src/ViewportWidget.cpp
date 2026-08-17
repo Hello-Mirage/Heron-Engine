@@ -1262,7 +1262,12 @@ void ViewportWidget::mousePressEvent(QMouseEvent* event)
                 float strength = m_TerrainEditorPanel->GetBrushStrength();
                 
                 Heron::TerrainGenerator::Sculpt(terrain, hitPoint, brushType, radius, strength);
+                
+                if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::OpenGL) {
+                    makeCurrent();
+                }
                 Heron::TerrainGenerator::UpdateMesh(terrain);
+                
                 emit PropertiesChanged();
                 update();
                 return; // Consume event
@@ -1387,7 +1392,12 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event)
                 float strength = m_TerrainEditorPanel->GetBrushStrength();
                 
                 Heron::TerrainGenerator::Sculpt(terrain, hitPoint, brushType, radius, strength);
+                
+                if (Heron::RendererAPI::GetAPI() == Heron::RendererAPI::API::OpenGL) {
+                    makeCurrent();
+                }
                 Heron::TerrainGenerator::UpdateMesh(terrain);
+                
                 emit PropertiesChanged();
                 update();
                 m_LastMousePosition = currentPosition;

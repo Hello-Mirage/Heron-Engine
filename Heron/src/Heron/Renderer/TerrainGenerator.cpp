@@ -11,65 +11,53 @@ namespace Heron {
 
     Ref<VertexArray> TerrainGenerator::GenerateTerrain(TerrainComponent& terrain) {
         
-        int width = 1, height = 1, channels = 1;
-        unsigned char* data = nullptr;
+        // Initialize RuntimeHeightData if it's empty
+        if (terrain.RuntimeHeightData.empty()) {
+            int width = 0, height = 0, channels = 1;
+            unsigned char* data = nullptr;
 
-        terrain.HeightmapData.clear();
-        terrain.HeightmapWidth = 0;
-        terrain.HeightmapHeight = 0;
-
-        if (!terrain.HeightmapPath.empty()) {
-            stbi_set_flip_vertically_on_load(1);
-            data = stbi_load(terrain.HeightmapPath.c_str(), &width, &height, &channels, 1); // load as 1 channel (grayscale)
+            if (!terrain.HeightmapPath.empty()) {
+                stbi_set_flip_vertically_on_load(1);
+                data = stbi_load(terrain.HeightmapPath.c_str(), &width, &height, &channels, 1);
+            }
             
+            if (!data || width == 0 || height == 0) {
+                width = terrain.Resolution + 1;
+                height = terrain.Resolution + 1;
+            }
+
+            terrain.HeightmapWidth = width;
+            terrain.HeightmapHeight = height;
+            terrain.RuntimeHeightData.assign(width * height, 0.0f);
+
             if (data) {
-                terrain.HeightmapWidth = width;
-                terrain.HeightmapHeight = height;
-                terrain.HeightmapData.assign(data, data + (width * height));
+                for(int i=0; i < width * height; i++) {
+                    terrain.RuntimeHeightData[i] = (data[i] / 255.0f) * terrain.HeightScale;
+                }
+                stbi_image_free(data);
             }
         }
         
         int resolution = terrain.Resolution;
         float size = terrain.Size;
-        float heightScale = terrain.HeightScale;
 
         int vertexCount = (resolution + 1) * (resolution + 1);
         std::vector<float> vertices;
         vertices.reserve(vertexCount * 8); // x, y, z, nx, ny, nz, u, v
 
-        float halfSize = size / 2.0f;
         float dx = size / (float)resolution;
         float dz = size / (float)resolution;
 
         // Generate Vertices
         for (int z = 0; z <= resolution; ++z) {
             for (int x = 0; x <= resolution; ++x) {
-                // World coordinates (starting from 0,0,0 to match Box3D HeightField)
                 float px = x * dx;
                 float pz = z * dz;
                 
-                // Heightmap sampling
-                float py = 0.0f;
-                if (data) {
-                    // Map x,z to image coordinates
-                    float u = (float)x / (float)resolution;
-                    float v = (float)z / (float)resolution;
-                    
-                    int texX = (int)(u * (width - 1));
-                    int texY = (int)(v * (height - 1));
-                    
-                    // Safe clamp
-                    if (texX < 0) texX = 0;
-                    if (texX >= width) texX = width - 1;
-                    if (texY < 0) texY = 0;
-                    if (texY >= height) texY = height - 1;
+                // Sample from RuntimeHeightData
+                float py = GetHeightAt(terrain, px, pz);
 
-                    unsigned char pixelValue = data[texY * width + texX];
-                    float normalizedHeight = (float)pixelValue / 255.0f;
-                    py = normalizedHeight * heightScale;
-                }
-
-                // Temporary normal (will recalculate later if needed)
+                // Temporary normal
                 float nx = 0.0f, ny = 1.0f, nz = 0.0f;
                 
                 // UV coordinates
@@ -101,21 +89,14 @@ namespace Heron {
                 int bottomLeft = ((z + 1) * (resolution + 1)) + x;
                 int bottomRight = bottomLeft + 1;
 
-                // Triangle 1
                 indices.push_back(topLeft);
                 indices.push_back(bottomLeft);
                 indices.push_back(topRight);
 
-                // Triangle 2
                 indices.push_back(topRight);
                 indices.push_back(bottomLeft);
                 indices.push_back(bottomRight);
             }
-        }
-
-        // Free image data
-        if (data) {
-            stbi_image_free(data);
         }
 
         // Create Vertex Array
@@ -133,19 +114,21 @@ namespace Heron {
         Ref<IndexBuffer> indexBuffer = IndexBuffer::Create(indices.data(), indices.size());
         vertexArray->SetIndexBuffer(indexBuffer);
 
+        // Recalculate Normals (basic)
+        // For simplicity, normals are set to (0,1,0) above. We will let UpdateMesh handle proper normal recalculation if needed, 
+        // or we can calculate it here. For now, flat is okay, UpdateMesh has proper normals.
+
         return vertexArray;
     }
 
     float TerrainGenerator::GetHeightAt(const TerrainComponent& terrain, float localX, float localZ) {
-        if (terrain.HeightmapData.empty() || terrain.HeightmapWidth == 0 || terrain.HeightmapHeight == 0) {
+        if (terrain.RuntimeHeightData.empty() || terrain.HeightmapWidth == 0 || terrain.HeightmapHeight == 0) {
             return 0.0f;
         }
 
-        float halfSize = terrain.Size / 2.0f;
-        
-        // Map local coords to 0.0 - 1.0 UV space
-        float u = (localX + halfSize) / terrain.Size;
-        float v = (localZ + halfSize) / terrain.Size;
+        // Map local coords to 0.0 - 1.0 UV space (Terrain now starts at 0,0,0)
+        float u = localX / terrain.Size;
+        float v = localZ / terrain.Size;
 
         // Clamp to edge
         if (u < 0.0f) u = 0.0f;
@@ -157,12 +140,9 @@ namespace Heron {
         float texX = u * (terrain.HeightmapWidth - 1);
         float texY = v * (terrain.HeightmapHeight - 1);
 
-        // Bilinear interpolation could be added here for smoother walking, 
-        // but for now nearest neighbor is fast and sufficient for a basic system.
         int ix = (int)std::round(texX);
         int iy = (int)std::round(texY);
 
-        // Clamp again just to be safe
         if (ix < 0) ix = 0;
         if (ix >= terrain.HeightmapWidth) ix = terrain.HeightmapWidth - 1;
         if (iy < 0) iy = 0;

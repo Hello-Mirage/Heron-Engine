@@ -301,13 +301,7 @@ namespace Heron {
                     // Add Terrain HeightField if present
                     if (m_Registry.all_of<TerrainComponent>(e)) {
                         auto& terrain = m_Registry.get<TerrainComponent>(e);
-                        if (!terrain.RuntimeHeightField && !terrain.HeightmapData.empty()) {
-                            
-                            // 1. Build float array for Box3D
-                            terrain.RuntimeHeightData.resize(terrain.HeightmapData.size());
-                            for(size_t i = 0; i < terrain.HeightmapData.size(); i++) {
-                                terrain.RuntimeHeightData[i] = (terrain.HeightmapData[i] / 255.0f) * terrain.HeightScale;
-                            }
+                        if (!terrain.RuntimeHeightField && !terrain.RuntimeHeightData.empty()) {
                             
                             // 2. Define HeightField
                             b3HeightFieldDef hfDef = { 0 };
